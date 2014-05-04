@@ -19,8 +19,8 @@ go run statsgod.go
 # Start a testing receiver.
 go run test_receiver.go
 
- # Send data to the daemon. Set a gauge to 3 for the_magic_number
- echo "the_magic_number:3|g" | nc localhost 5000
+# Send data to the daemon. Set a gauge to 3 for the_magic_number
+echo "the_magic_number:3|g" | nc localhost 5000
 ```
 
 ## TODO
