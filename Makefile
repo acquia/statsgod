@@ -15,7 +15,7 @@ deps:
 	go get github.com/kr/godep github.com/golang/lint/golint
 
 test: deps
-	golint ./
+	$GOPATH/bin/golint ./
 
 recv:
 	go run -race receiver/test_receiver.go
