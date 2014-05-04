@@ -11,6 +11,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+// Package statsgod is an experimental implementation of statsd.
 package statsgod
 
 import (
@@ -29,6 +31,7 @@ import (
 // Counter (c):  increment/decrement a given method
 // Timer   (ms): a timer that calculates average, 90% percentile, etc.
 
+// Metric is our main data type.
 type Metric struct {
 	key         string  // Name of the metric.
 	metricType  string  // What type of metric is it (gauge, counter, timer)
@@ -41,6 +44,7 @@ type Metric struct {
 	lastFlushed int     // When did we last flush this out?
 }
 
+// MetricStore is storage for the metrics with locking.
 type MetricStore struct {
 	//Map from the kef of the metric to the int value.
 	metrics map[string]Metric
@@ -48,9 +52,12 @@ type MetricStore struct {
 }
 
 const (
-	AvailableMemory         = 10 << 20 // 10 MB, for example
+	// AvailableMemory is amount of available memory for the process.
+	AvailableMemory = 10 << 20 // 10 MB, for example
+	// AverageMemoryPerRequest is how much memory we want to use per request.
 	AverageMemoryPerRequest = 10 << 10 // 10 KB
-	MAXREQS                 = AvailableMemory / AverageMemoryPerRequest
+	// MAXREQS is how many requests.
+	MAXREQS = AvailableMemory / AverageMemoryPerRequest
 )
 
 var graphitePipeline = make(chan Metric, MAXREQS)
@@ -91,7 +98,7 @@ func main() {
 
 func handleRequest(conn net.Conn, store *MetricStore) {
 	for {
-		var metric, val, valid_op string
+		var metric, val, validOp string
 		buf := make([]byte, 512)
 		_, err := conn.Read(buf)
 		if err != nil {
@@ -106,7 +113,7 @@ func handleRequest(conn net.Conn, store *MetricStore) {
 			metric = bits[0][1]
 			val = bits[0][2]
 			operation := bits[0][3]
-			valid_op, err = shortTypeToLong(operation)
+			validOp, err = shortTypeToLong(operation)
 			if err != nil {
 				fmt.Println("Problem handling metric of type: ", operation)
 			}
@@ -119,7 +126,7 @@ func handleRequest(conn net.Conn, store *MetricStore) {
 		value, err := strconv.ParseFloat(val, 32)
 		checkError(err, "Converting Value", false)
 
-		logger(fmt.Sprintf("(%s) %s => %f", valid_op, metric, value))
+		logger(fmt.Sprintf("(%s) %s => %f", validOp, metric, value))
 
 		store.Set(metric, float32(value))
 	}
@@ -137,8 +144,8 @@ func flushMetrics(store *MetricStore) {
 			}
 
 			for _, metric := range store.metrics {
-				flush_time := int(time.Now().Unix())
-				metric.flushTime = flush_time
+				flushTime := int(time.Now().Unix())
+				metric.flushTime = flushTime
 				graphitePipeline <- metric
 			}
 		}
@@ -154,10 +161,10 @@ func handleGraphiteQueue(store *MetricStore) {
 }
 
 func sendToGraphite(key string, val float32, timer int) {
-	string_time := strconv.Itoa(timer)
+	stringTime := strconv.Itoa(timer)
 
-	str_val := strconv.FormatFloat(float64(val), 'f', 6, 32)
-	logger(fmt.Sprintf("Sending to Graphite: %s@%s => %s", key, string_time, str_val))
+	strVal := strconv.FormatFloat(float64(val), 'f', 6, 32)
+	logger(fmt.Sprintf("Sending to Graphite: %s@%s => %s", key, stringTime, strVal))
 	conn, err := net.Dial("tcp", "localhost:5001")
 	if err != nil {
 		fmt.Println("Could not connect to remote graphite server")
@@ -174,10 +181,12 @@ func sendToGraphite(key string, val float32, timer int) {
 	logger("Done sending to Graphite")
 }
 
+// NewMetricStore Initialize the metric store.
 func NewMetricStore() *MetricStore {
 	return &MetricStore{metrics: make(map[string]Metric)}
 }
 
+// Get will return a metric from inside the store.
 func (s *MetricStore) Get(key string) Metric {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -185,6 +194,7 @@ func (s *MetricStore) Get(key string) Metric {
 	return m
 }
 
+// Set will store or update a metric.
 func (s *MetricStore) Set(key string, val float32) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -224,7 +234,7 @@ func shortTypeToLong(short string) (string, error) {
 	case "ms" == short:
 		return "timer", nil
 	}
-	return "", errors.New("Unknown metric type")
+	return "", errors.New("unknown metric type")
 }
 
 func logger(msg string) {
@@ -237,10 +247,10 @@ func splitString(raw, separator string) (string, string) {
 	return split[0], split[1]
 }
 
-func checkError(err error, info string, panic_on_error bool) {
+func checkError(err error, info string, panicOnError bool) {
 	if err != nil {
 		var errString = "ERROR: " + info + " " + err.Error()
-		if panic_on_error {
+		if panicOnError {
 			panic(errString)
 		}
 	}
