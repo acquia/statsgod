@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -11,9 +12,14 @@ import (
 	"time"
 )
 
+// Gauge   (g):  constant metric, repeats this gauge until stats server is restarted
+// Counter (c):  increment/decrement a given method
+// Timer   (ms): a timer that calculates average, 90% percentile, etc.
+
 type Metric struct {
 	key         string  // Name of the metric.
-	totalHits   int     // Number of times its been used.
+	metricType  string  // What type of metric is it (gauge, counter, timer)
+	totalHits   int     // Number of times it has been used.
 	lastValue   float32 // The last value stored.
 	avgValue    float32 // What is the average over all the hits?
 	maxValue    float32 // What is the biggest value we've seen?
@@ -72,6 +78,7 @@ func main() {
 
 func handleRequest(conn net.Conn, store *MetricStore) {
 	for {
+		var metric, val, valid_op string
 		buf := make([]byte, 512)
 		_, err := conn.Read(buf)
 		if err != nil {
@@ -80,14 +87,16 @@ func handleRequest(conn net.Conn, store *MetricStore) {
 		}
 		defer conn.Close()
 
-		var metric, val, operation string
-
 		msg := regexp.MustCompile(`(.*)\:(.*)\|(.*)`)
 		bits := msg.FindAllStringSubmatch(string(buf), 1)
 		if len(bits) != 0 {
 			metric = bits[0][1]
 			val = bits[0][2]
-			operation = bits[0][3]
+			operation := bits[0][3]
+			valid_op, err = shortTypeToLong(operation)
+			if err != nil {
+				fmt.Println("Problem handling metric of type: ", operation)
+			}
 		} else {
 			fmt.Println("Error processing client message: ", string(buf))
 			return
@@ -97,7 +106,7 @@ func handleRequest(conn net.Conn, store *MetricStore) {
 		value, err := strconv.ParseFloat(val, 32)
 		checkError(err, "Converting Value", false)
 
-		logger(fmt.Sprintf("(%s) %s => %f", operation, metric, value))
+		logger(fmt.Sprintf("(%s) %s => %f", valid_op, metric, value))
 
 		store.Set(metric, float32(value))
 	}
@@ -191,6 +200,18 @@ func (s *MetricStore) Set(key string, val float32) bool {
 	s.metrics[key] = m
 
 	return false
+}
+
+func shortTypeToLong(short string) (string, error) {
+	switch {
+	case "c" == short:
+		return "counter", nil
+	case "g" == short:
+		return "gauge", nil
+	case "ms" == short:
+		return "timer", nil
+	}
+	return "", errors.New("Unknown metric type")
 }
 
 func logger(msg string) {
