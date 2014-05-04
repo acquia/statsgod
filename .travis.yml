@@ -1,0 +1,7 @@
+language: go
+script:
+    - pushd $TRAVIS_BUILD_DIR
+    - make test
+    - popd
+notifications:
+  email: false
