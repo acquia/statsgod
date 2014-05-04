@@ -12,8 +12,8 @@
  * limitations under the License.
  */
 
-// Package statsgod is an experimental implementation of statsd.
-package statsgod
+// Package main statsgod is an experimental implementation of statsd.
+package main
 
 import (
 	"errors"
@@ -174,7 +174,7 @@ func sendToGraphite(key string, val float32, timer int) {
 	//Determine why this checkError wasn't working.
 	//checkError(err, "Problem sending to graphite", false)
 
-	payload := fmt.Sprintf("%s %s %s", key, string_time, str_val)
+	payload := fmt.Sprintf("%s %s %s", key, stringTime, strVal)
 	fmt.Fprintf(conn, payload)
 	conn.Close()
 
