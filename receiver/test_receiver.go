@@ -13,7 +13,7 @@
  */
 
 // Package receiver is a sample receiver app.
-package receiver
+package main
 
 /**
  * Test receiver used to debug statsgod that listens on localhost:5001
