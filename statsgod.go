@@ -98,7 +98,7 @@ func main() {
 
 func handleRequest(conn net.Conn, store *MetricStore) {
 	for {
-		var metric, val, validOp string
+		var metric, val, metricType string
 		buf := make([]byte, 512)
 		_, err := conn.Read(buf)
 		if err != nil {
@@ -112,10 +112,10 @@ func handleRequest(conn net.Conn, store *MetricStore) {
 		if len(bits) != 0 {
 			metric = bits[0][1]
 			val = bits[0][2]
-			operation := bits[0][3]
-			validOp, err = shortTypeToLong(operation)
+			tmpMetricType := bits[0][3]
+			metricType, err = shortTypeToLong(tmpMetricType)
 			if err != nil {
-				fmt.Println("Problem handling metric of type: ", operation)
+				fmt.Println("Problem handling metric of type: ", tmpMetricType)
 			}
 		} else {
 			fmt.Println("Error processing client message: ", string(buf))
@@ -126,9 +126,9 @@ func handleRequest(conn net.Conn, store *MetricStore) {
 		value, err := strconv.ParseFloat(val, 32)
 		checkError(err, "Converting Value", false)
 
-		logger(fmt.Sprintf("(%s) %s => %f", validOp, metric, value))
+		logger(fmt.Sprintf("(%s) %s => %f", metricType, metric, value))
 
-		store.Set(metric, float32(value))
+		store.Set(metric, metricType, float32(value))
 	}
 }
 
@@ -156,29 +156,49 @@ func flushMetrics(store *MetricStore) {
 func handleGraphiteQueue(store *MetricStore) {
 	for {
 		metric := <-graphitePipeline
-		go sendToGraphite(metric.key, metric.lastValue, metric.flushTime)
+		//go sendToGraphite(metric.key, metric.lastValue, metric.flushTime)
+		go sendToGraphite(metric)
 	}
 }
 
-func sendToGraphite(key string, val float32, timer int) {
-	stringTime := strconv.Itoa(timer)
+func sendToGraphite(m Metric) {
+//func sendToGraphite(key string, val float32, timer int) {
+	stringTime := strconv.Itoa(m.flushTime)
 
-	strVal := strconv.FormatFloat(float64(val), 'f', 6, 32)
-	logger(fmt.Sprintf("Sending to Graphite: %s@%s => %s", key, stringTime, strVal))
+	strVal := strconv.FormatFloat(float64(m.lastValue), 'f', 6, 32)
+	logger(fmt.Sprintf("Sending to Graphite: %s@%s => %s", m.key, stringTime, strVal))
 	conn, err := net.Dial("tcp", "localhost:5001")
 	if err != nil {
 		fmt.Println("Could not connect to remote graphite server")
 		return
 	}
 
+	defer conn.Close()
+	defer logger("Done sending to Graphite")
+
 	//Determine why this checkError wasn't working.
 	//checkError(err, "Problem sending to graphite", false)
 
-	payload := fmt.Sprintf("%s %s %s", key, stringTime, strVal)
+	// The only value for gauges and counters, and the main value for timers.
+	payload := fmt.Sprintf("%s %s %s", m.key, stringTime, strVal)
 	fmt.Fprintf(conn, payload)
-	conn.Close()
 
-	logger("Done sending to Graphite")
+	if (m.metricType != "timer") {
+		return
+	}
+
+	// Handle timer specific calls.
+	strVal = strconv.FormatFloat(float64(m.avgValue), 'f', 6, 32)
+	payload = fmt.Sprintf("%s.avg_value %s %s", m.key, stringTime, strVal)
+	fmt.Fprintf(conn, payload)
+
+	strVal = strconv.FormatFloat(float64(m.maxValue), 'f', 6, 32)
+	payload = fmt.Sprintf("%s.max_value %s %s", m.key, stringTime, strVal)
+	fmt.Fprintf(conn, payload)
+
+	strVal = strconv.FormatFloat(float64(m.minValue), 'f', 6, 32)
+	payload = fmt.Sprintf("%s.min_value %s %s", m.key, stringTime, strVal)
+	fmt.Fprintf(conn, payload)
 }
 
 // NewMetricStore Initialize the metric store.
@@ -195,7 +215,7 @@ func (s *MetricStore) Get(key string) Metric {
 }
 
 // Set will store or update a metric.
-func (s *MetricStore) Set(key string, val float32) bool {
+func (s *MetricStore) Set(key string, metricType string, val float32) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -205,20 +225,38 @@ func (s *MetricStore) Set(key string, val float32) bool {
 		m.key = key
 		m.totalHits = 1
 		m.lastValue = val
-		m.avgValue = val
-		m.minValue = val
-		m.maxValue = val
-	} else {
-		if val < m.minValue {
-			m.minValue = val
-		}
-		if val > m.maxValue {
-			m.maxValue = val
-		}
-		m.avgValue = ((float32(m.totalHits) * m.avgValue) + val) / float32(m.totalHits+1)
-		m.totalHits++
-		m.lastValue = val
+		m.metricType = metricType
 
+		switch {
+		case metricType == "gauge":
+			
+		case metricType == "counter":
+		case metricType == "timer":
+			m.avgValue = val
+			m.minValue = val
+			m.maxValue = val
+
+		}
+	} else {
+		m.totalHits++
+
+		switch {
+		case metricType == "gauge":
+			m.lastValue = val
+		case metricType == "counter":
+			m.lastValue += val
+		case metricType == "timer":
+			m.lastValue = val
+			if val < m.minValue {
+				m.minValue = val
+			}
+			if val > m.maxValue {
+				m.maxValue = val
+			}
+			m.avgValue = ((float32(m.totalHits) * m.avgValue) + val) / float32(m.totalHits+1)
+		}
+
+		
 	}
 	s.metrics[key] = m
 
