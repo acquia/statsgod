@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,15 +34,13 @@ import (
 
 // Metric is our main data type.
 type Metric struct {
-	key         string  // Name of the metric.
-	metricType  string  // What type of metric is it (gauge, counter, timer)
-	totalHits   int     // Number of times it has been used.
-	lastValue   float32 // The last value stored.
-	avgValue    float32 // What is the average over all the hits?
-	maxValue    float32 // What is the biggest value we've seen?
-	minValue    float32 // What is the minimum value we've seen?
-	flushTime   int     // What time are we sending Graphite?
-	lastFlushed int     // When did we last flush this out?
+	key         string    // Name of the metric.
+	metricType  string    // What type of metric is it (gauge, counter, timer)
+	totalHits   int       // Number of times it has been used.
+	lastValue   float32   // The last value stored.
+	allValues   []float32 // All of the values.
+	flushTime   int       // What time are we sending Graphite?
+	lastFlushed int       // When did we last flush this out?
 }
 
 // MetricStore is storage for the metrics with locking.
@@ -81,7 +80,7 @@ func main() {
 
 	var store = NewMetricStore()
 
-	// Every 5 seconds we want to flush the metrics
+	// Every X seconds we want to flush the metrics
 	go flushMetrics(store)
 
 	// Constantly process background Graphite queue.
@@ -142,7 +141,7 @@ func flushMetrics(store *MetricStore) {
 		case <-flushTicker:
 			fmt.Println("Tick...")
 			for index, metric := range store.metrics {
-				logger(fmt.Sprintf("[%s] %s: %g", index, metric.key, metric.lastValue))
+				logger(fmt.Sprintf("[%s] %s: %g %s", index, metric.key, metric.lastValue, metric.allValues))
 			}
 
 			for _, metric := range store.metrics {
@@ -158,7 +157,6 @@ func flushMetrics(store *MetricStore) {
 func handleGraphiteQueue(store *MetricStore) {
 	for {
 		metric := <-graphitePipeline
-		//go sendToGraphite(metric.key, metric.lastValue, metric.flushTime)
 		go sendToGraphite(metric)
 	}
 }
@@ -188,16 +186,29 @@ func sendToGraphite(m Metric) {
 		return
 	}
 
+	sort.Sort(ByFloat32(m.allValues))
+	logger(fmt.Sprintf("NEW! %s", m.allValues))
+
+	// Calculate the math values for the timer.
+	minValue := m.allValues[0]
+	maxValue := m.allValues[len(m.allValues)-1]
+
+	sum := float32(0)
+	for _, value := range m.allValues {
+		sum += value
+	}
+	avgValue := sum / float32(m.totalHits)
+
 	// Handle timer specific calls.
-	strVal = strconv.FormatFloat(float64(m.avgValue), 'f', 6, 32)
+	strVal = strconv.FormatFloat(float64(avgValue), 'f', 6, 32)
 	payload = fmt.Sprintf("%s.avg_value %s %s", m.key, strVal, stringTime)
 	fmt.Fprintf(conn, payload)
 
-	strVal = strconv.FormatFloat(float64(m.maxValue), 'f', 6, 32)
+	strVal = strconv.FormatFloat(float64(maxValue), 'f', 6, 32)
 	payload = fmt.Sprintf("%s.max_value %s %s", m.key, strVal, stringTime)
 	fmt.Fprintf(conn, payload)
 
-	strVal = strconv.FormatFloat(float64(m.minValue), 'f', 6, 32)
+	strVal = strconv.FormatFloat(float64(minValue), 'f', 6, 32)
 	payload = fmt.Sprintf("%s.min_value %s %s", m.key, strVal, stringTime)
 	fmt.Fprintf(conn, payload)
 }
@@ -230,13 +241,8 @@ func (s *MetricStore) Set(key string, metricType string, val float32) bool {
 
 		switch {
 		case metricType == "gauge":
-
 		case metricType == "counter":
 		case metricType == "timer":
-			m.avgValue = val
-			m.minValue = val
-			m.maxValue = val
-
 		}
 	} else {
 		m.totalHits++
@@ -248,16 +254,10 @@ func (s *MetricStore) Set(key string, metricType string, val float32) bool {
 			m.lastValue += val
 		case metricType == "timer":
 			m.lastValue = val
-			if val < m.minValue {
-				m.minValue = val
-			}
-			if val > m.maxValue {
-				m.maxValue = val
-			}
-			m.avgValue = ((float32(m.totalHits) * m.avgValue) + val) / float32(m.totalHits+1)
 		}
 
 	}
+	m.allValues = append(m.allValues, val)
 	s.metrics[key] = m
 
 	return false
@@ -274,6 +274,13 @@ func shortTypeToLong(short string) (string, error) {
 	}
 	return "", errors.New("unknown metric type")
 }
+
+// ByFloat32 implements sort.Interface for []Float32.
+type ByFloat32 []float32
+
+func (a ByFloat32) Len() int           { return len(a) }
+func (a ByFloat32) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByFloat32) Less(i, j int) bool { return a[i] < a[j] }
 
 func logger(msg string) {
 	fmt.Println(msg)
