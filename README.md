@@ -14,6 +14,7 @@ Usage:  statsgod [args]
  -p port			port to listen on
  -r remotehost		remote host to send data to
  -q remoteport		remote port to send data to
+ -t flushtime		time for the metrics to be flushed. default 5s
  -d 				debug mode
 
 # Example, first start the daemon.
@@ -31,7 +32,8 @@ echo "the_magic_number:3|g" | nc localhost 5000
 ---
 Statsgod is very much a work in progress and has a number of missing features, including, but not limited to:
 
-* Support for all statsd metrics (timers, gauges, counters, etc.)
+* Support for all statsd metrics (timers, gauges, counters, etc.) - In Progress
+* Correctly support the timers with working percentile support
 * Working debug subsystem
 * Ensure the channel is optimized
 * Working configuration file
@@ -39,6 +41,7 @@ Statsgod is very much a work in progress and has a number of missing features, i
 * Operate with UDP or TCP
 * Configurable flush time
 * Performance runing and tunable channels
+* Have the metric types by pluggable?
 * Pluggable storage backend?
 
 
