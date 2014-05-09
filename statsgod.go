@@ -65,6 +65,7 @@ var graphitePipeline = make(chan Metric, MAXREQS)
 var debug = flag.Bool("d", false, "Debugging mode")
 var host = flag.String("h", "localhost", "Hostname")
 var port = flag.String("p", "8125", "Port")
+var flushTime = flag.Duration("t", 5*time.Second, "Flush time")
 
 func main() {
 	// Load command line options.
@@ -133,7 +134,8 @@ func handleRequest(conn net.Conn, store *MetricStore) {
 }
 
 func flushMetrics(store *MetricStore) {
-	flushTicker := time.Tick(5e9)
+	flushTicker := time.Tick(*flushTime)
+	logger(fmt.Sprintf("Flushing every %s", *flushTime))
 
 	for {
 		select {
@@ -162,7 +164,6 @@ func handleGraphiteQueue(store *MetricStore) {
 }
 
 func sendToGraphite(m Metric) {
-//func sendToGraphite(key string, val float32, timer int) {
 	stringTime := strconv.Itoa(m.flushTime)
 
 	strVal := strconv.FormatFloat(float64(m.lastValue), 'f', 6, 32)
@@ -180,24 +181,24 @@ func sendToGraphite(m Metric) {
 	//checkError(err, "Problem sending to graphite", false)
 
 	// The only value for gauges and counters, and the main value for timers.
-	payload := fmt.Sprintf("%s %s %s", m.key, stringTime, strVal)
+	payload := fmt.Sprintf("%s %s %s", m.key, strVal, stringTime)
 	fmt.Fprintf(conn, payload)
 
-	if (m.metricType != "timer") {
+	if m.metricType != "timer" {
 		return
 	}
 
 	// Handle timer specific calls.
 	strVal = strconv.FormatFloat(float64(m.avgValue), 'f', 6, 32)
-	payload = fmt.Sprintf("%s.avg_value %s %s", m.key, stringTime, strVal)
+	payload = fmt.Sprintf("%s.avg_value %s %s", m.key, strVal, stringTime)
 	fmt.Fprintf(conn, payload)
 
 	strVal = strconv.FormatFloat(float64(m.maxValue), 'f', 6, 32)
-	payload = fmt.Sprintf("%s.max_value %s %s", m.key, stringTime, strVal)
+	payload = fmt.Sprintf("%s.max_value %s %s", m.key, strVal, stringTime)
 	fmt.Fprintf(conn, payload)
 
 	strVal = strconv.FormatFloat(float64(m.minValue), 'f', 6, 32)
-	payload = fmt.Sprintf("%s.min_value %s %s", m.key, stringTime, strVal)
+	payload = fmt.Sprintf("%s.min_value %s %s", m.key, strVal, stringTime)
 	fmt.Fprintf(conn, payload)
 }
 
@@ -229,7 +230,7 @@ func (s *MetricStore) Set(key string, metricType string, val float32) bool {
 
 		switch {
 		case metricType == "gauge":
-			
+
 		case metricType == "counter":
 		case metricType == "timer":
 			m.avgValue = val
@@ -256,7 +257,6 @@ func (s *MetricStore) Set(key string, metricType string, val float32) bool {
 			m.avgValue = ((float32(m.totalHits) * m.avgValue) + val) / float32(m.totalHits+1)
 		}
 
-		
 	}
 	s.metrics[key] = m
 
