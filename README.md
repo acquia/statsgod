@@ -15,6 +15,7 @@ Usage:  statsgod [args]
  -r remotehost		remote host to send data to
  -q remoteport		remote port to send data to
  -t flushtime		time for the metrics to be flushed. default 5s
+ -e percentile		which percentile we want to track for metrics
  -d 				debug mode
 
 # Example, first start the daemon.
