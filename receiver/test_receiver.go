@@ -44,12 +44,13 @@ func main() {
 }
 
 func handleConnection(c net.Conn) {
+	// TODO - this isn't working for new lines?
 	status, err := bufio.NewReader(c).ReadString('\n')
 	if err != nil && err != io.EOF {
 		fmt.Println("Error: ", err)
 		os.Exit(1)
 	}
-	fmt.Println("From client: ", status)
+	fmt.Printf("New client: %v\n%s", c.RemoteAddr(), status)
 
 	c.Close()
 	fmt.Printf("Connection from %v closed.\n", c.RemoteAddr())

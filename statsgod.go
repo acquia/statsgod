@@ -12,13 +12,14 @@
  * limitations under the License.
  */
 
-// Package main statsgod is an experimental implementation of statsd.
+// Package main: statsgod is an experimental implementation of statsd.
 package main
 
 import (
 	"errors"
 	"flag"
 	"fmt"
+	"math"
 	"net"
 	"regexp"
 	"sort"
@@ -45,7 +46,7 @@ type Metric struct {
 
 // MetricStore is storage for the metrics with locking.
 type MetricStore struct {
-	//Map from the kef of the metric to the int value.
+	//Map from the key of the metric to the int value.
 	metrics map[string]Metric
 	mu      sync.RWMutex
 }
@@ -65,6 +66,7 @@ var debug = flag.Bool("d", false, "Debugging mode")
 var host = flag.String("h", "localhost", "Hostname")
 var port = flag.String("p", "8125", "Port")
 var flushTime = flag.Duration("t", 5*time.Second, "Flush time")
+var percentile = flag.Int("e", 90, "Percentile")
 
 func main() {
 	// Load command line options.
@@ -163,31 +165,56 @@ func handleGraphiteQueue(store *MetricStore) {
 
 func sendToGraphite(m Metric) {
 	stringTime := strconv.Itoa(m.flushTime)
+	var gkey string
 
-	strVal := strconv.FormatFloat(float64(m.lastValue), 'f', 6, 32)
-	logger(fmt.Sprintf("Sending to Graphite: %s@%s => %s", m.key, stringTime, strVal))
-	conn, err := net.Dial("tcp", "localhost:5001")
-	if err != nil {
-		fmt.Println("Could not connect to remote graphite server")
+	//strVal := strconv.FormatFloat(float64(m.lastValue), 'f', 6, 32)
+	//logger(fmt.Sprintf("Sending to Graphite: %s@%s => %s", m.key, stringTime, strVal))
+
+	// This metric has no data, so leave it.
+	// TODO: should we remove the old unused metric parents from memory eventually?
+	if len(m.allValues) == 0 {
+		logger(fmt.Sprintf("Key: %s had no new data", m.key))
 		return
 	}
-
-	defer conn.Close()
+	
 	defer logger("Done sending to Graphite")
 
 	//Determine why this checkError wasn't working.
 	//checkError(err, "Problem sending to graphite", false)
 
-	// The only value for gauges and counters, and the main value for timers.
-	payload := fmt.Sprintf("%s %s %s", m.key, strVal, stringTime)
-	fmt.Fprintf(conn, payload)
+	// TODO for metrics
+	// http://blog.pkhamre.com/2012/07/24/understanding-statsd-and-graphite/
+	// timers and counters need to flush their data after each flush?
+	// timers need to have real mean, etc.
+
+	if m.metricType == "gauge" {
+		gkey = fmt.Sprintf("stats.gauges.%s.avg_value", m.key)
+		sendSingleMetricToGraphite(gkey, m.lastValue, stringTime)
+	} else if m.metricType == "counter" {
+		flushSeconds := time.Duration.Seconds(*flushTime)
+		valuePerSec := m.lastValue / float32(flushSeconds)
+
+		gkey = fmt.Sprintf("stats.%s", m.key)
+		sendSingleMetricToGraphite(gkey, valuePerSec, stringTime)
+
+		gkey = fmt.Sprintf("stats_counts.%s", m.key)
+		sendSingleMetricToGraphite(gkey, m.lastValue, stringTime)
+
+		logger(fmt.Sprintf("Before truncate: %d", len(m.allValues)))
+		// Clear the old values
+		m.allValues = m.allValues[:0]
+		logger(fmt.Sprintf("After truncate: %d", len(m.allValues)))
+	}
+
+	sendSingleMetricToGraphite(m.key, m.lastValue, stringTime)
 
 	if m.metricType != "timer" {
+		logger("Not a timer, so skipping additional graphite points")
 		return
 	}
 
 	sort.Sort(ByFloat32(m.allValues))
-	logger(fmt.Sprintf("NEW! %s", m.allValues))
+	logger(fmt.Sprintf("Sorted: %s", m.allValues))
 
 	// Calculate the math values for the timer.
 	minValue := m.allValues[0]
@@ -199,18 +226,35 @@ func sendToGraphite(m Metric) {
 	}
 	avgValue := sum / float32(m.totalHits)
 
+	thresholdIndex := int( math.Floor( ( ((100 - float64(*percentile)) / 100) * float64(m.totalHits) ) + 0.5))	
+	numInThreshold := m.totalHits - thresholdIndex;
+
+	maxAtThreshold := m.allValues[numInThreshold - 1];
+	logger(fmt.Sprintf("Key: %s | Total Vals: %s | Threshold IDX: %s | How many in threshold? %s | Max at threshold: %s", m.key, m.totalHits, thresholdIndex, numInThreshold, maxAtThreshold))
+
 	// Handle timer specific calls.
-	strVal = strconv.FormatFloat(float64(avgValue), 'f', 6, 32)
-	payload = fmt.Sprintf("%s.avg_value %s %s", m.key, strVal, stringTime)
-	fmt.Fprintf(conn, payload)
+	
 
-	strVal = strconv.FormatFloat(float64(maxValue), 'f', 6, 32)
-	payload = fmt.Sprintf("%s.max_value %s %s", m.key, strVal, stringTime)
-	fmt.Fprintf(conn, payload)
+	gkey = fmt.Sprintf("stats.timers.%s.avg_value", m.key)
+	sendSingleMetricToGraphite(gkey, avgValue, stringTime)
 
-	strVal = strconv.FormatFloat(float64(minValue), 'f', 6, 32)
-	payload = fmt.Sprintf("%s.min_value %s %s", m.key, strVal, stringTime)
-	fmt.Fprintf(conn, payload)
+	gkey = fmt.Sprintf("stats.timers.%s.max_value", m.key)
+	sendSingleMetricToGraphite(gkey, maxValue, stringTime)
+
+	gkey = fmt.Sprintf("stats.timers.%s.min_value", m.key)
+	sendSingleMetricToGraphite(gkey, minValue, stringTime)
+
+	// TODO: not the real mean.
+	gkey = fmt.Sprintf("stats.timers.%s.mean_%d", m.key, *percentile)
+	sendSingleMetricToGraphite(gkey, avgValue, stringTime)
+
+	gkey = fmt.Sprintf("stats.timers.%s.upper_%d", m.key, *percentile)
+	sendSingleMetricToGraphite(gkey, maxAtThreshold, stringTime)
+
+	// TODO: not the real sum?
+	gkey = fmt.Sprintf("stats.timers.%s.sum_%d", m.key, *percentile)
+	sendSingleMetricToGraphite(gkey, sum, stringTime)
+
 }
 
 // NewMetricStore Initialize the metric store.
@@ -257,10 +301,28 @@ func (s *MetricStore) Set(key string, metricType string, val float32) bool {
 		}
 
 	}
+
+	// TODO: should we bother trackin this for counters?
 	m.allValues = append(m.allValues, val)
 	s.metrics[key] = m
 
 	return false
+}
+
+// sendSingleMetricToGraphite formats a message and a value and time and sends to Graphite.
+func sendSingleMetricToGraphite(key string, v float32, t string) {
+	c, err := net.Dial("tcp", "localhost:5001")
+	if err != nil {
+		fmt.Println("Could not connect to remote graphite server")
+		return
+	}
+
+	defer c.Close()
+
+	sv := strconv.FormatFloat(float64(v), 'f', 6, 32)
+	payload := fmt.Sprintf("%s %s %s", key, sv, t)
+	logger(payload)
+	fmt.Fprintf(c, fmt.Sprintf("%s %v %s\n", key, sv, t))
 }
 
 func shortTypeToLong(short string) (string, error) {
