@@ -11,7 +11,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package receiver
+
+// Package receiver is a sample receiver app.
+package main
 
 /**
  * Test receiver used to debug statsgod that listens on localhost:5001
@@ -42,12 +44,13 @@ func main() {
 }
 
 func handleConnection(c net.Conn) {
+	// TODO - this isn't working for new lines?
 	status, err := bufio.NewReader(c).ReadString('\n')
 	if err != nil && err != io.EOF {
 		fmt.Println("Error: ", err)
 		os.Exit(1)
 	}
-	fmt.Println("From client: ", status)
+	fmt.Printf("New client: %v\n%s", c.RemoteAddr(), status)
 
 	c.Close()
 	fmt.Printf("Connection from %v closed.\n", c.RemoteAddr())
