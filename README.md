@@ -1,4 +1,7 @@
-# Statsgod
+statsgod
+========
+
+[![Build Status](https://travis-ci.org/syrneus/statsgod.svg?branch=master)](https://travis-ci.org/syrneus/statsgod)
 
 Statsgod is an experimental Go implementation (or deviation) of Etsy's statsd service.  It does not yet support all statsd configuration options or other capabilities and has not yet been performance tested. All of the metric types are not yet thoroughly tested.
 
