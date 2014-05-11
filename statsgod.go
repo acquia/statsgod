@@ -143,7 +143,7 @@ func flushMetrics(store *MetricStore) {
 		case <-flushTicker:
 			fmt.Println("Tick...")
 			for index, metric := range store.metrics {
-				logger(fmt.Sprintf("[%s] %s: %g %s", index, metric.key, metric.lastValue, metric.allValues))
+				logger(fmt.Sprintf("%s (%s) => %g %v", index, metric.metricType, metric.lastValue, metric.allValues))
 			}
 
 			for _, metric := range store.metrics {
@@ -153,13 +153,15 @@ func flushMetrics(store *MetricStore) {
 			}
 		}
 	}
-
 }
 
 func handleGraphiteQueue(store *MetricStore) {
 	for {
 		metric := <-graphitePipeline
 		go sendToGraphite(metric)
+		if metric.metricType != "gauge" {
+			delete(store.metrics, metric.key)
+		}
 	}
 }
 
@@ -167,16 +169,6 @@ func sendToGraphite(m Metric) {
 	stringTime := strconv.Itoa(m.flushTime)
 	var gkey string
 
-	//strVal := strconv.FormatFloat(float64(m.lastValue), 'f', 6, 32)
-	//logger(fmt.Sprintf("Sending to Graphite: %s@%s => %s", m.key, stringTime, strVal))
-
-	// This metric has no data, so leave it.
-	// TODO: should we remove the old unused metric parents from memory eventually?
-	if len(m.allValues) == 0 {
-		logger(fmt.Sprintf("Key: %s had no new data", m.key))
-		return
-	}
-	
 	defer logger("Done sending to Graphite")
 
 	//Determine why this checkError wasn't working.
@@ -184,8 +176,7 @@ func sendToGraphite(m Metric) {
 
 	// TODO for metrics
 	// http://blog.pkhamre.com/2012/07/24/understanding-statsd-and-graphite/
-	// timers and counters need to flush their data after each flush?
-	// timers need to have real mean, etc.
+	// Ensure all of the metrics are working correctly.
 
 	if m.metricType == "gauge" {
 		gkey = fmt.Sprintf("stats.gauges.%s.avg_value", m.key)
@@ -199,11 +190,6 @@ func sendToGraphite(m Metric) {
 
 		gkey = fmt.Sprintf("stats_counts.%s", m.key)
 		sendSingleMetricToGraphite(gkey, m.lastValue, stringTime)
-
-		logger(fmt.Sprintf("Before truncate: %d", len(m.allValues)))
-		// Clear the old values
-		m.allValues = m.allValues[:0]
-		logger(fmt.Sprintf("After truncate: %d", len(m.allValues)))
 	}
 
 	sendSingleMetricToGraphite(m.key, m.lastValue, stringTime)
@@ -213,27 +199,24 @@ func sendToGraphite(m Metric) {
 		return
 	}
 
+	// Handle timer specific calls.
 	sort.Sort(ByFloat32(m.allValues))
-	logger(fmt.Sprintf("Sorted: %s", m.allValues))
+	logger(fmt.Sprintf("Sorted Vals: %v", m.allValues))
 
 	// Calculate the math values for the timer.
 	minValue := m.allValues[0]
 	maxValue := m.allValues[len(m.allValues)-1]
 
 	sum := float32(0)
-	for _, value := range m.allValues {
+	cumulativeValues := []float32{minValue}
+	for idx, value := range m.allValues {
 		sum += value
+
+		if idx != 0 {
+			cumulativeValues = append(cumulativeValues, cumulativeValues[idx-1]+value)
+		}
 	}
 	avgValue := sum / float32(m.totalHits)
-
-	thresholdIndex := int( math.Floor( ( ((100 - float64(*percentile)) / 100) * float64(m.totalHits) ) + 0.5))	
-	numInThreshold := m.totalHits - thresholdIndex;
-
-	maxAtThreshold := m.allValues[numInThreshold - 1];
-	logger(fmt.Sprintf("Key: %s | Total Vals: %s | Threshold IDX: %s | How many in threshold? %s | Max at threshold: %s", m.key, m.totalHits, thresholdIndex, numInThreshold, maxAtThreshold))
-
-	// Handle timer specific calls.
-	
 
 	gkey = fmt.Sprintf("stats.timers.%s.avg_value", m.key)
 	sendSingleMetricToGraphite(gkey, avgValue, stringTime)
@@ -243,18 +226,27 @@ func sendToGraphite(m Metric) {
 
 	gkey = fmt.Sprintf("stats.timers.%s.min_value", m.key)
 	sendSingleMetricToGraphite(gkey, minValue, stringTime)
+	// All of the percentile based value calculations.
 
-	// TODO: not the real mean.
+	thresholdIndex := int(math.Floor((((100 - float64(*percentile)) / 100) * float64(m.totalHits)) + 0.5))
+	numInThreshold := m.totalHits - thresholdIndex
+
+	maxAtThreshold := m.allValues[numInThreshold-1]
+	logger(fmt.Sprintf("Key: %s | Total Vals: %d | Threshold IDX: %d | How many in threshold? %d | Max at threshold: %f", m.key, m.totalHits, thresholdIndex, numInThreshold, maxAtThreshold))
+
+	logger(fmt.Sprintf("Cumultative Values: %v", cumulativeValues))
+
+	// Take the cumulative at the threshold and divide by the threshold idx.
+	meanAtPercentile := cumulativeValues[numInThreshold-1] / float32(numInThreshold)
+
 	gkey = fmt.Sprintf("stats.timers.%s.mean_%d", m.key, *percentile)
-	sendSingleMetricToGraphite(gkey, avgValue, stringTime)
+	sendSingleMetricToGraphite(gkey, meanAtPercentile, stringTime)
 
 	gkey = fmt.Sprintf("stats.timers.%s.upper_%d", m.key, *percentile)
 	sendSingleMetricToGraphite(gkey, maxAtThreshold, stringTime)
 
-	// TODO: not the real sum?
 	gkey = fmt.Sprintf("stats.timers.%s.sum_%d", m.key, *percentile)
-	sendSingleMetricToGraphite(gkey, sum, stringTime)
-
+	sendSingleMetricToGraphite(gkey, cumulativeValues[numInThreshold-1], stringTime)
 }
 
 // NewMetricStore Initialize the metric store.
@@ -264,6 +256,7 @@ func NewMetricStore() *MetricStore {
 
 // Get will return a metric from inside the store.
 func (s *MetricStore) Get(key string) Metric {
+	// TODO - investigate this never running. NOTE: Set doesn't run Get.
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	m := s.metrics[key]

@@ -1,9 +1,8 @@
 # Statsgod
 
-Statsgod is an experimental Go implementation (or deviation) of Etsy's statsd service.  It does not yet support all statsd metric types, configuration options or other capabilities and has not yet been thoroughly tested.
+Statsgod is an experimental Go implementation (or deviation) of Etsy's statsd service.  It does not yet support all statsd configuration options or other capabilities and has not yet been performance tested. All of the metric types are not yet thoroughly tested.
 
 The original statsd was written in node.js. This version is written in Go and utilizes capabilities such as Go channels to improve overall concurrency and scalability.
-
 
 ## Usage
 ---
@@ -33,18 +32,16 @@ echo "the_magic_number:3|g" | nc localhost 5000
 ---
 Statsgod is very much a work in progress and has a number of missing features, including, but not limited to:
 
-* Support for all statsd metrics (timers, gauges, counters, etc.) - In Progress
-* Correctly support the timers with working percentile support
-* Working debug subsystem
-* Ensure the channel is optimized
+* Support multiple percentiles
+* Working debug subsystem with logging levels
 * Working configuration file
 * Unit tests
 * Operate with UDP or TCP
-* Configurable flush time
-* Performance runing and tunable channels
-* Have the metric types by pluggable?
+* Load test and soak test
+* Pickle support for sending to Graphite in parallel?
+* Performance tuning and tunable channels
+* Have the metric types be pluggable?
 * Pluggable storage backend?
-
 
 ## License
 ---
