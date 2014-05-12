@@ -1,0 +1,19 @@
+###
+# Main server configuration
+###
+name:  "statsgod"
+host:  localhost
+port:  8125
+debug: false
+
+###
+# Backend graphite server configuration
+###
+graphiteHost: localhost
+graphitePost: 5001
+
+###
+# Flush options
+###
+flushTime: 60s
+percentile: 80
