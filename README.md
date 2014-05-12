@@ -11,14 +11,14 @@ The original statsd was written in node.js. This version is written in Go and ut
 ---
 ```
 Usage:  statsgod [args]
- -c configfile		configuration yaml file to process
- -h host			host to listen on
- -p port			port to listen on
- -r remotehost		remote host to send data to
- -q remoteport		remote port to send data to
- -t flushtime		time for the metrics to be flushed. default 5s
- -e percentile		which percentile we want to track for metrics
- -d 				debug mode
+ -config configfile		configuration yaml file to process
+ -host host				host to listen on
+ -port port				port to listen on
+ -graphiteHost 			remotehost: remote host to send data to
+ -graphitePort 			remoteport: remote port to send data to
+ -flushTime 			flushtime: time for the metrics to be flushed. default 10s
+ -percentile 			percentile: which percentile we want to track for metrics
+ -debug 				debug mode
 
 # Example, first start the daemon.
 go run statsgod.go
