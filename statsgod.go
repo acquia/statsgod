@@ -109,12 +109,16 @@ func handleRequest(conn net.Conn, store *MetricStore) {
 		}
 		defer conn.Close()
 
+		logger(fmt.Sprintf("Got from client: %s", buf))
+
 		msg := regexp.MustCompile(`(.*)\:(.*)\|(.*)`)
 		bits := msg.FindAllStringSubmatch(string(buf), 1)
 		if len(bits) != 0 {
 			metric = bits[0][1]
 			val = bits[0][2]
 			tmpMetricType := bits[0][3]
+			tmpMetricType = strings.TrimSpace(tmpMetricType)
+			tmpMetricType = strings.Trim(tmpMetricType, "\x00")
 			metricType, err = shortTypeToLong(tmpMetricType)
 			if err != nil {
 				fmt.Println("Problem handling metric of type: ", tmpMetricType)
