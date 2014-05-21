@@ -19,6 +19,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"gopkg.in/yaml.v1"
+	"io/ioutil"
 	"math"
 	"net"
 	"regexp"
@@ -62,17 +64,38 @@ const (
 
 var graphitePipeline = make(chan Metric, MAXREQS)
 
-var debug = flag.Bool("d", false, "Debugging mode")
-var host = flag.String("h", "localhost", "Hostname")
-var port = flag.String("p", "8125", "Port")
-var flushTime = flag.Duration("t", 5*time.Second, "Flush time")
-var percentile = flag.Int("e", 90, "Percentile")
+var config = flag.String("config", "config.yml", "YAML config file path")
+var debug = flag.Bool("debug", false, "Debugging mode")
+var host = flag.String("host", "localhost", "Hostname")
+var port = flag.Int("port", 8125, "Port")
+var graphiteHost = flag.String("graphiteHost", "localhost", "Graphite Hostname")
+var graphitePort = flag.Int("graphitePort", 5001, "Graphite Port")
+var flushTime = flag.Duration("flushTime", 10*time.Second, "Flush time")
+var percentile = flag.Int("percentile", 90, "Percentile")
 
 func main() {
 	// Load command line options.
 	flag.Parse()
 
-	addr := fmt.Sprintf("%s:%s", *host, *port)
+	// Load the YAML config.
+	c := loadConfig(*config)
+	logger(fmt.Sprintf("Loaded Config: %v", c))
+
+	flag.VisitAll(
+		func(f *flag.Flag) {
+			if c[f.Name] != nil {
+				//*(f.Name) = f.Value
+				logger(fmt.Sprintf("Flag Name Has Value: %s", f.Name))
+			}
+
+		})
+
+	f := flag.Lookup("flushTime")
+	logger(fmt.Sprintf("F ft: %v", f))
+
+	logger(fmt.Sprintf("flushTime from config: %v", *flushTime))
+
+	addr := fmt.Sprintf("%s:%d", *host, *port)
 	fmt.Println("Starting stats server on ", addr)
 
 	listener, err := net.Listen("tcp", addr)
@@ -96,6 +119,56 @@ func main() {
 		}
 		go handleRequest(conn, store)
 	}
+}
+
+func loadConfig(c string) map[interface{}]interface{} {
+	m := make(map[interface{}]interface{})
+
+	contents, err := ioutil.ReadFile(c)
+	checkError(err, "Config file could not be read", true)
+
+	err = yaml.Unmarshal([]byte(contents), &m)
+	checkError(err, "YAML error processing config file", true)
+
+	if m["debug"] != nil {
+		*debug = m["debug"].(bool)
+	}
+
+	touchedFlags := make(map[string]int)
+	flag.Visit(
+		func(f *flag.Flag) {
+			touchedFlags[f.Name] = 1
+		})
+
+	logger(fmt.Sprintf("All touched flags: %v", touchedFlags))
+
+	if m["flushTime"] != nil && touchedFlags["flushTime"] != 1 {
+		ft, err := time.ParseDuration(m["flushTime"].(string))
+		checkError(err, "Could not parse flushTime", true)
+		*flushTime = ft
+	}
+
+	if m["host"] != nil && touchedFlags["host"] != 1 {
+		*host = m["host"].(string)
+	}
+
+	if m["port"] != nil && touchedFlags["port"] != 1 {
+		*port = m["port"].(int)
+	}
+
+	if m["graphiteHost"] != nil && touchedFlags["graphiteHost"] != 1 {
+		*graphiteHost = m["graphiteHost"].(string)
+	}
+
+	if m["graphitePort"] != nil && touchedFlags["graphitePort"] != 1 {
+		*graphitePort = m["graphitePort"].(int)
+	}
+
+	if m["percentile"] != nil && touchedFlags["percentile"] != 1 {
+		*percentile = m["percentile"].(int)
+	}
+
+	return m
 }
 
 func handleRequest(conn net.Conn, store *MetricStore) {
@@ -308,7 +381,7 @@ func (s *MetricStore) Set(key string, metricType string, val float32) bool {
 
 // sendSingleMetricToGraphite formats a message and a value and time and sends to Graphite.
 func sendSingleMetricToGraphite(key string, v float32, t string) {
-	c, err := net.Dial("tcp", "localhost:5001")
+	c, err := net.Dial("tcp", fmt.Sprintf("%s:%d", *graphiteHost, *graphitePort))
 	if err != nil {
 		fmt.Println("Could not connect to remote graphite server")
 		return
