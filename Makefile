@@ -13,6 +13,7 @@ $(project): deps
 
 deps:
 	go get github.com/kr/godep github.com/golang/lint/golint
+	go get gopkg.in/yaml.v1
 
 test: deps
 	$(HOME)/gopath/bin/golint ./
