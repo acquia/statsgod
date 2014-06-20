@@ -1,6 +1,6 @@
 language: go
 go:
-    - 1.2
+    - 1.3
 script:
     - pushd $TRAVIS_BUILD_DIR
     - make test
