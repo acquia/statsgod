@@ -15,5 +15,5 @@ graphitePost: 5001
 ###
 # Flush options
 ###
-flushTime: 60s
+flushTime: 10s
 percentile: 80
