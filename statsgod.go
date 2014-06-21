@@ -35,10 +35,14 @@ import (
 )
 
 var (
-    Trace   *log.Logger
-    Info    *log.Logger
-    Warning *log.Logger
-    Error   *log.Logger
+	// Trace log level.
+	Trace *log.Logger
+	// Info log level.
+	Info *log.Logger
+	// Warning log level.
+	Warning *log.Logger
+	// Error log level.
+	Error *log.Logger
 )
 
 // Gauge   (g):  constant metric, repeats this gauge until stats server is restarted
@@ -87,19 +91,19 @@ func main() {
 	// Load command line options.
 	flag.Parse()
 
-	if (*debug) {
-		LogInit(os.Stdout, os.Stdout, os.Stdout, os.Stderr)
+	if *debug {
+		logInit(os.Stdout, os.Stdout, os.Stdout, os.Stderr)
 		Info.Println("Debugging mode enabled")
 	} else {
-		LogInit(ioutil.Discard, os.Stdout, os.Stdout, os.Stderr)
+		logInit(ioutil.Discard, os.Stdout, os.Stdout, os.Stderr)
 	}
-	
+
 	// Load the YAML config.
 	c := loadConfig(*config)
-	Info.Println("Loaded Config: %v", c)
+	Info.Printf("Loaded Config: %v", c)
 
 	addr := fmt.Sprintf("%s:%d", *host, *port)
-	Info.Println("Starting stats server on ", addr)
+	Info.Printf("Starting stats server on %s", addr)
 
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -124,27 +128,27 @@ func main() {
 	}
 }
 
-func LogInit(
-    traceHandle io.Writer,
-    infoHandle io.Writer,
-    warningHandle io.Writer,
-    errorHandle io.Writer) {
+func logInit(
+	traceHandle io.Writer,
+	infoHandle io.Writer,
+	warningHandle io.Writer,
+	errorHandle io.Writer) {
 
-    Trace = log.New(traceHandle,
-        "TRACE: ",
-        log.Ldate|log.Ltime|log.Lshortfile)
+	Trace = log.New(traceHandle,
+		"TRACE: ",
+		log.Ldate|log.Ltime|log.Lshortfile)
 
-    Info = log.New(infoHandle,
-        "INFO: ",
-        log.Ldate|log.Ltime|log.Lshortfile)
+	Info = log.New(infoHandle,
+		"INFO: ",
+		log.Ldate|log.Ltime|log.Lshortfile)
 
-    Warning = log.New(warningHandle,
-        "WARNING: ",
-        log.Ldate|log.Ltime|log.Lshortfile)
+	Warning = log.New(warningHandle,
+		"WARNING: ",
+		log.Ldate|log.Ltime|log.Lshortfile)
 
-    Error = log.New(errorHandle,
-        "ERROR: ",
-        log.Ldate|log.Ltime|log.Lshortfile)
+	Error = log.New(errorHandle,
+		"ERROR: ",
+		log.Ldate|log.Ltime|log.Lshortfile)
 }
 
 func loadConfig(c string) map[interface{}]interface{} {
@@ -206,7 +210,7 @@ func handleRequest(conn net.Conn, store *MetricStore) {
 		}
 		defer conn.Close()
 
-		Trace.Println("Got from client: %s", buf)
+		Trace.Printf("Got from client: %s", strings.Trim(string(buf), "\x0a"))
 
 		msg := regexp.MustCompile(`(.*)\:(.*)\|(.*)`)
 		bits := msg.FindAllStringSubmatch(string(buf), 1)
@@ -217,13 +221,13 @@ func handleRequest(conn net.Conn, store *MetricStore) {
 			tmpMetricType = strings.TrimSpace(tmpMetricType)
 			tmpMetricType = strings.Trim(tmpMetricType, "\x00")
 			metricType, err = shortTypeToLong(tmpMetricType)
-			Trace.Println("Metric Type Is: %v (~%v)", metricType, tmpMetricType)
+			Trace.Printf("Metric Type Is: %v (~%v)", metricType, tmpMetricType)
 			if err != nil {
-				Warning.Println("Problem handling metric of type: ", tmpMetricType)
+				Warning.Printf("Problem handling metric of type: %s", tmpMetricType)
 				continue
 			}
 		} else {
-			Warning.Println("Error processing client message: ", string(buf))
+			Warning.Printf("Error processing client message: %s", string(buf))
 			return
 		}
 
@@ -231,7 +235,7 @@ func handleRequest(conn net.Conn, store *MetricStore) {
 		value, err := strconv.ParseFloat(val, 32)
 		checkError(err, "Converting Value", false)
 
-		Trace.Println("(%s) %s => %f", metricType, metric, value)
+		Trace.Printf("(%s) %s => %f", metricType, metric, value)
 
 		store.Set(metric, metricType, float32(value))
 	}
@@ -239,14 +243,14 @@ func handleRequest(conn net.Conn, store *MetricStore) {
 
 func flushMetrics(store *MetricStore) {
 	flushTicker := time.Tick(*flushTime)
-	Info.Println("Flushing every %v", *flushTime)
+	Info.Printf("Flushing every %v", *flushTime)
 
 	for {
 		select {
 		case <-flushTicker:
 			Trace.Println("Tick...")
 			for index, metric := range store.metrics {
-				Trace.Println("Flushing %s (%s) => %g %v", index, metric.metricType, metric.lastValue, metric.allValues)
+				Trace.Printf("Flushing %s (%s) => %g %v", index, metric.metricType, metric.lastValue, metric.allValues)
 			}
 
 			for _, metric := range store.metrics {
@@ -304,7 +308,7 @@ func sendToGraphite(m Metric) {
 
 	// Handle timer specific calls.
 	sort.Sort(ByFloat32(m.allValues))
-	Trace.Println("Sorted Vals: %v", m.allValues)
+	Trace.Printf("Sorted Vals: %v", m.allValues)
 
 	// Calculate the math values for the timer.
 	minValue := m.allValues[0]
@@ -335,9 +339,9 @@ func sendToGraphite(m Metric) {
 	numInThreshold := m.totalHits - thresholdIndex
 
 	maxAtThreshold := m.allValues[numInThreshold-1]
-	Trace.Println("Key: %s | Total Vals: %d | Threshold IDX: %d | How many in threshold? %d | Max at threshold: %f", m.key, m.totalHits, thresholdIndex, numInThreshold, maxAtThreshold)
+	Trace.Printf("Key: %s | Total Vals: %d | Threshold IDX: %d | How many in threshold? %d | Max at threshold: %f", m.key, m.totalHits, thresholdIndex, numInThreshold, maxAtThreshold)
 
-	Trace.Println("Cumultative Values: %v", cumulativeValues)
+	Trace.Printf("Cumultative Values: %v", cumulativeValues)
 
 	// Take the cumulative at the threshold and divide by the threshold idx.
 	meanAtPercentile := cumulativeValues[numInThreshold-1] / float32(numInThreshold)
@@ -417,7 +421,7 @@ func sendSingleMetricToGraphite(key string, v float32, t string) {
 
 	sv := strconv.FormatFloat(float64(v), 'f', 6, 32)
 	payload := fmt.Sprintf("%s %s %s", key, sv, t)
-	Trace.Println("Payload: %v", payload)
+	Trace.Printf("Payload: %v", payload)
 
 	// Send to the connection
 	fmt.Fprintf(c, fmt.Sprintf("%s %v %s\n", key, sv, t))
@@ -432,7 +436,7 @@ func shortTypeToLong(short string) (string, error) {
 	case "ms" == short:
 		return "timer", nil
 	}
-	return "", errors.New("unknown metric type")
+	return "unknown", errors.New("unknown metric type")
 }
 
 // ByFloat32 implements sort.Interface for []Float32.
