@@ -36,7 +36,6 @@ echo "the_magic_number:3|g" | nc localhost 5000
 Statsgod is very much a work in progress and has a number of missing features, including, but not limited to:
 
 * Support multiple percentiles
-* Working debug subsystem with logging levels
 * Working configuration file
 * Unit tests
 * Operate with UDP or TCP
