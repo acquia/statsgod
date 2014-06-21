@@ -20,15 +20,25 @@ import (
 	"flag"
 	"fmt"
 	"gopkg.in/yaml.v1"
+	"io"
 	"io/ioutil"
+	"log"
 	"math"
 	"net"
+	"os"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+)
+
+var (
+    Trace   *log.Logger
+    Info    *log.Logger
+    Warning *log.Logger
+    Error   *log.Logger
 )
 
 // Gauge   (g):  constant metric, repeats this gauge until stats server is restarted
@@ -77,26 +87,19 @@ func main() {
 	// Load command line options.
 	flag.Parse()
 
+	if (*debug) {
+		LogInit(os.Stdout, os.Stdout, os.Stdout, os.Stderr)
+		Info.Println("Debugging mode enabled")
+	} else {
+		LogInit(ioutil.Discard, os.Stdout, os.Stdout, os.Stderr)
+	}
+	
 	// Load the YAML config.
 	c := loadConfig(*config)
-	logger(fmt.Sprintf("Loaded Config: %v", c))
-
-	flag.VisitAll(
-		func(f *flag.Flag) {
-			if c[f.Name] != nil {
-				//*(f.Name) = f.Value
-				logger(fmt.Sprintf("Flag Name Has Value: %s", f.Name))
-			}
-
-		})
-
-	f := flag.Lookup("flushTime")
-	logger(fmt.Sprintf("F ft: %v", f))
-
-	logger(fmt.Sprintf("flushTime from config: %v", *flushTime))
+	Info.Println("Loaded Config: %v", c)
 
 	addr := fmt.Sprintf("%s:%d", *host, *port)
-	fmt.Println("Starting stats server on ", addr)
+	Info.Println("Starting stats server on ", addr)
 
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -121,6 +124,29 @@ func main() {
 	}
 }
 
+func LogInit(
+    traceHandle io.Writer,
+    infoHandle io.Writer,
+    warningHandle io.Writer,
+    errorHandle io.Writer) {
+
+    Trace = log.New(traceHandle,
+        "TRACE: ",
+        log.Ldate|log.Ltime|log.Lshortfile)
+
+    Info = log.New(infoHandle,
+        "INFO: ",
+        log.Ldate|log.Ltime|log.Lshortfile)
+
+    Warning = log.New(warningHandle,
+        "WARNING: ",
+        log.Ldate|log.Ltime|log.Lshortfile)
+
+    Error = log.New(errorHandle,
+        "ERROR: ",
+        log.Ldate|log.Ltime|log.Lshortfile)
+}
+
 func loadConfig(c string) map[interface{}]interface{} {
 	m := make(map[interface{}]interface{})
 
@@ -139,8 +165,6 @@ func loadConfig(c string) map[interface{}]interface{} {
 		func(f *flag.Flag) {
 			touchedFlags[f.Name] = 1
 		})
-
-	logger(fmt.Sprintf("All touched flags: %v", touchedFlags))
 
 	if m["flushTime"] != nil && touchedFlags["flushTime"] != 1 {
 		ft, err := time.ParseDuration(m["flushTime"].(string))
@@ -182,7 +206,7 @@ func handleRequest(conn net.Conn, store *MetricStore) {
 		}
 		defer conn.Close()
 
-		logger(fmt.Sprintf("Got from client: %s", buf))
+		Trace.Println("Got from client: %s", buf)
 
 		msg := regexp.MustCompile(`(.*)\:(.*)\|(.*)`)
 		bits := msg.FindAllStringSubmatch(string(buf), 1)
@@ -193,11 +217,13 @@ func handleRequest(conn net.Conn, store *MetricStore) {
 			tmpMetricType = strings.TrimSpace(tmpMetricType)
 			tmpMetricType = strings.Trim(tmpMetricType, "\x00")
 			metricType, err = shortTypeToLong(tmpMetricType)
+			Trace.Println("Metric Type Is: %v (~%v)", metricType, tmpMetricType)
 			if err != nil {
-				fmt.Println("Problem handling metric of type: ", tmpMetricType)
+				Warning.Println("Problem handling metric of type: ", tmpMetricType)
+				continue
 			}
 		} else {
-			fmt.Println("Error processing client message: ", string(buf))
+			Warning.Println("Error processing client message: ", string(buf))
 			return
 		}
 
@@ -205,7 +231,7 @@ func handleRequest(conn net.Conn, store *MetricStore) {
 		value, err := strconv.ParseFloat(val, 32)
 		checkError(err, "Converting Value", false)
 
-		logger(fmt.Sprintf("(%s) %s => %f", metricType, metric, value))
+		Trace.Println("(%s) %s => %f", metricType, metric, value)
 
 		store.Set(metric, metricType, float32(value))
 	}
@@ -213,14 +239,14 @@ func handleRequest(conn net.Conn, store *MetricStore) {
 
 func flushMetrics(store *MetricStore) {
 	flushTicker := time.Tick(*flushTime)
-	logger(fmt.Sprintf("Flushing every %s", *flushTime))
+	Info.Println("Flushing every %v", *flushTime)
 
 	for {
 		select {
 		case <-flushTicker:
-			fmt.Println("Tick...")
+			Trace.Println("Tick...")
 			for index, metric := range store.metrics {
-				logger(fmt.Sprintf("%s (%s) => %g %v", index, metric.metricType, metric.lastValue, metric.allValues))
+				Trace.Println("Flushing %s (%s) => %g %v", index, metric.metricType, metric.lastValue, metric.allValues)
 			}
 
 			for _, metric := range store.metrics {
@@ -246,7 +272,7 @@ func sendToGraphite(m Metric) {
 	stringTime := strconv.Itoa(m.flushTime)
 	var gkey string
 
-	defer logger("Done sending to Graphite")
+	defer Info.Println("Done sending to Graphite")
 
 	//Determine why this checkError wasn't working.
 	//checkError(err, "Problem sending to graphite", false)
@@ -272,13 +298,13 @@ func sendToGraphite(m Metric) {
 	sendSingleMetricToGraphite(m.key, m.lastValue, stringTime)
 
 	if m.metricType != "timer" {
-		logger("Not a timer, so skipping additional graphite points")
+		Trace.Println("Not a timer, so skipping additional graphite points")
 		return
 	}
 
 	// Handle timer specific calls.
 	sort.Sort(ByFloat32(m.allValues))
-	logger(fmt.Sprintf("Sorted Vals: %v", m.allValues))
+	Trace.Println("Sorted Vals: %v", m.allValues)
 
 	// Calculate the math values for the timer.
 	minValue := m.allValues[0]
@@ -309,9 +335,9 @@ func sendToGraphite(m Metric) {
 	numInThreshold := m.totalHits - thresholdIndex
 
 	maxAtThreshold := m.allValues[numInThreshold-1]
-	logger(fmt.Sprintf("Key: %s | Total Vals: %d | Threshold IDX: %d | How many in threshold? %d | Max at threshold: %f", m.key, m.totalHits, thresholdIndex, numInThreshold, maxAtThreshold))
+	Trace.Println("Key: %s | Total Vals: %d | Threshold IDX: %d | How many in threshold? %d | Max at threshold: %f", m.key, m.totalHits, thresholdIndex, numInThreshold, maxAtThreshold)
 
-	logger(fmt.Sprintf("Cumultative Values: %v", cumulativeValues))
+	Trace.Println("Cumultative Values: %v", cumulativeValues)
 
 	// Take the cumulative at the threshold and divide by the threshold idx.
 	meanAtPercentile := cumulativeValues[numInThreshold-1] / float32(numInThreshold)
@@ -383,7 +409,7 @@ func (s *MetricStore) Set(key string, metricType string, val float32) bool {
 func sendSingleMetricToGraphite(key string, v float32, t string) {
 	c, err := net.Dial("tcp", fmt.Sprintf("%s:%d", *graphiteHost, *graphitePort))
 	if err != nil {
-		fmt.Println("Could not connect to remote graphite server")
+		Error.Println("Could not connect to remote graphite server")
 		return
 	}
 
@@ -391,7 +417,9 @@ func sendSingleMetricToGraphite(key string, v float32, t string) {
 
 	sv := strconv.FormatFloat(float64(v), 'f', 6, 32)
 	payload := fmt.Sprintf("%s %s %s", key, sv, t)
-	logger(payload)
+	Trace.Println("Payload: %v", payload)
+
+	// Send to the connection
 	fmt.Fprintf(c, fmt.Sprintf("%s %v %s\n", key, sv, t))
 }
 
