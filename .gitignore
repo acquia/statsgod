@@ -22,3 +22,5 @@ _vendor/*
 
 *.exe
 *.test
+
+coverage.out
