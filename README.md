@@ -7,6 +7,7 @@ Statsgod is an experimental Go implementation (or deviation) of Etsy's statsd se
 
 The original statsd was written in node.js. This version is written in Go and utilizes capabilities such as Go channels to improve overall concurrency and scalability.
 
+
 ## Usage
 ---
 ```
@@ -19,16 +20,31 @@ Usage:  statsgod [args]
  -flushTime 			flushtime: time for the metrics to be flushed. default 10s
  -percentile 			percentile: which percentile we want to track for metrics
  -debug 				debug mode
-
-# Example, first start the daemon.
-go run statsgod.go
-
-# Start a testing receiver.
-go run test_receiver.go
-
-# Send data to the daemon. Set a gauge to 3 for the_magic_number
-echo "the_magic_number:3|g" | nc localhost 5000
 ```
+
+### Example:
+1.  start the daemon.
+	
+		go run statsgod.go
+
+2. Start a testing receiver.
+
+		go run test_receiver.go
+
+3. Send data to the daemon. Set a gauge to 3 for the_magic_number
+
+		echo "the_magic_number:3|g" | nc localhost 5000
+
+
+## Development
+To download all dependencies and compile statsgod
+
+	go get -u github.com/mattn/gom
+	mkdir -p $GOPATH/src/github.com/syrneus/statsgod
+	git clone https://github.com/syrneus/statsgod $GOPATH/src/github.com/syrneus/statsgod
+	cd $GOPATH/src/github.com/syrneus/statsgod
+	gom install
+	gom build -o $GOPATH/bin/statsgod
 
 
 ## TODO

@@ -1,0 +1,9 @@
+gom 'github.com/jmcvetta/randutil'
+gom 'gopkg.in/yaml.v1'
+
+group :test do
+  gom 'gopkg.in/check.v1'
+  gom 'github.com/golang/lint/golint'
+  gom 'code.google.com/p/go.tools/cmd/vet'
+  gom 'code.google.com/p/go.tools/cmd/cover'
+end
