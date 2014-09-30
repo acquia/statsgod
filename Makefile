@@ -1,22 +1,34 @@
 project=statsgod
 
+PACKAGES=generator receiver
+
+export PATH := $(abspath ./_vendor/bin):$(PATH)
+
+ifeq ($(TRAVIS), true)
+GOM=$(HOME)/gopath/bin/gom
+else
+GOM=gom
+endif
+
 all: deps ${project}
 
 clean:
-	rm -rf $(bindir)
+	rm -rf _vendor ${project}
 
 run: ${project}
 	go run -race ${project}.go
 
 $(project): deps
-	go build ./...
+	$(GOM) build
 
 deps:
-	go get github.com/kr/godep github.com/golang/lint/golint
-	go get gopkg.in/yaml.v1
+	$(GOM) -test install
 
 test: deps
-	$(HOME)/gopath/bin/golint ./
+	$(GOM) exec go fmt ./...
+	$(GOM) exec go vet -x ./...
+	$(GOM) exec golint $(PACKAGES:%=./%)
+	# $(GOM) exec go test -covermode=count -coverprofile=coverage.out .
 
 recv:
 	go run -race receiver/test_receiver.go
