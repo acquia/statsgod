@@ -17,7 +17,7 @@ Usage:  statsgod [args]
  -port port				port to listen on
  -graphiteHost 			remotehost: remote host to send data to
  -graphitePort 			remoteport: remote port to send data to
- -flushTime 			flushtime: time for the metrics to be flushed. default 10s
+ -flushInterval 		flush interval: interval for the metrics to be flushed. default 10s
  -percentile 			percentile: which percentile we want to track for metrics
  -debug 				debug mode
 ```

@@ -28,7 +28,7 @@ test: deps
 	$(GOM) exec go fmt ./...
 	$(GOM) exec go vet -x ./...
 	$(GOM) exec golint $(PACKAGES:%=./%)
-	# $(GOM) exec go test -covermode=count -coverprofile=coverage.out .
+	$(GOM) exec go test -covermode=count -coverprofile=coverage.out .
 
 recv:
 	go run -race receiver/test_receiver.go

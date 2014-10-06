@@ -12,7 +12,22 @@
  * limitations under the License.
  */
 
-// Package main: statsgod is an experimental implementation of statsd.
+/**
+ * Package main: statsgod is an experimental metrics aggregator inspired by
+ * statsd. The intent is to provide a server which accepts metrics over time,
+ * aggregates them and forwards on to permanent storage.
+ *
+ * Data is sent over a TCP socket in the format [namespace]:[value]|[type]
+ * where the namespace is a dot-delimeted string like "user.login.success".
+ * Values are floating point numbers represented as strings. The metric type
+ * uses the following values:
+ *
+ * Gauge   (g):  constant metric, value persists until the server is restarted.
+ * Counter (c):  increment/decrement a given namespace.
+ * Timer   (ms): a timer that calculates average, 90% percentile, etc.
+ *
+ * An example data string would be "user.login.success:123|c"
+ */
 package main
 
 import (
@@ -26,11 +41,9 @@ import (
 	"math"
 	"net"
 	"os"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -45,10 +58,6 @@ var (
 	Error *log.Logger
 )
 
-// Gauge   (g):  constant metric, repeats this gauge until stats server is restarted
-// Counter (c):  increment/decrement a given method
-// Timer   (ms): a timer that calculates average, 90% percentile, etc.
-
 // Metric is our main data type.
 type Metric struct {
 	key         string    // Name of the metric.
@@ -60,13 +69,6 @@ type Metric struct {
 	lastFlushed int       // When did we last flush this out?
 }
 
-// MetricStore is storage for the metrics with locking.
-type MetricStore struct {
-	//Map from the key of the metric to the int value.
-	metrics map[string]Metric
-	mu      sync.RWMutex
-}
-
 const (
 	// AvailableMemory is amount of available memory for the process.
 	AvailableMemory = 10 << 20 // 10 MB, for example
@@ -74,17 +76,28 @@ const (
 	AverageMemoryPerRequest = 10 << 10 // 10 KB
 	// MAXREQS is how many requests.
 	MAXREQS = AvailableMemory / AverageMemoryPerRequest
+	// SeparatorNamespaceValue is the character separating the namespace and value
+	// in the metric string.
+	SeparatorNamespaceValue = ":"
+	// SeparatorValueType is the character separating the value and metric type in
+	// the metric string.
+	SeparatorValueType = "|"
 )
 
-var graphitePipeline = make(chan Metric, MAXREQS)
+// The channel containing received metric strings.
+var parseChannel = make(chan string, MAXREQS)
 
+// The channel containing the Metric objects.
+var flushChannel = make(chan *Metric, MAXREQS)
+
+// CLI flags.
 var config = flag.String("config", "config.yml", "YAML config file path")
 var debug = flag.Bool("debug", false, "Debugging mode")
 var host = flag.String("host", "localhost", "Hostname")
 var port = flag.Int("port", 8125, "Port")
 var graphiteHost = flag.String("graphiteHost", "localhost", "Graphite Hostname")
 var graphitePort = flag.Int("graphitePort", 5001, "Graphite Port")
-var flushTime = flag.Duration("flushTime", 10*time.Second, "Flush time")
+var flushInterval = flag.Duration("flushInterval", 10*time.Second, "Flush time")
 var percentile = flag.Int("percentile", 90, "Percentile")
 
 func main() {
@@ -110,21 +123,19 @@ func main() {
 		checkError(err, "Starting Server", true)
 	}
 
-	var store = NewMetricStore()
+	// Parse the incoming messages and convert to metrics.
+	go parseMetrics()
 
-	// Every X seconds we want to flush the metrics
-	go flushMetrics(store)
-
-	// Constantly process background Graphite queue.
-	go handleGraphiteQueue(store)
+	// Flush the metrics to the remote stats collector.
+	go flushMetrics()
 
 	for {
 		conn, err := listener.Accept()
-		// TODO: handle errors with one client gracefully.
+		// @todo: handle errors with one client gracefully.
 		if err != nil {
 			checkError(err, "Accepting Connection", false)
 		}
-		go handleRequest(conn, store)
+		go handleTcpRequest(conn)
 	}
 }
 
@@ -170,10 +181,10 @@ func loadConfig(c string) map[interface{}]interface{} {
 			touchedFlags[f.Name] = 1
 		})
 
-	if m["flushTime"] != nil && touchedFlags["flushTime"] != 1 {
-		ft, err := time.ParseDuration(m["flushTime"].(string))
-		checkError(err, "Could not parse flushTime", true)
-		*flushTime = ft
+	if m["flushInterval"] != nil && touchedFlags["flushInterval"] != 1 {
+		ft, err := time.ParseDuration(m["flushInterval"].(string))
+		checkError(err, "Could not parse flushInterval", true)
+		*flushInterval = ft
 	}
 
 	if m["host"] != nil && touchedFlags["host"] != 1 {
@@ -199,77 +210,164 @@ func loadConfig(c string) map[interface{}]interface{} {
 	return m
 }
 
-func handleRequest(conn net.Conn, store *MetricStore) {
+// Processes the TCP data as quickly as possible, moving it onto a channel
+// and returning immediately. At this phase, we aren't worried about malformed
+// strings, we just want to collect them.
+func handleTcpRequest(conn net.Conn) {
+
+	// Read the data from the connection.
+	buf := make([]byte, 512)
+	_, err := conn.Read(buf)
+	if err != nil {
+		checkError(err, "Reading Connection", false)
+		return
+	}
+	defer conn.Close()
+
+	// As long as we have some data, submit it for processing Don't
+	// validate or parse it yet, just get the message on the channel asap.
+	// so that we can free up the connection.
+	if len(string(buf)) != 0 {
+		parseChannel <- strings.TrimSpace(strings.Trim(string(buf), "\x00"))
+	} else {
+		Warning.Printf("Error processing client message: %s", string(buf))
+		return
+	}
+
+	conn.Write([]byte(""))
+}
+
+// Parses the strings received from clients and creates Metric structures.
+func parseMetrics() {
+
 	for {
-		var metric, val, metricType string
-		buf := make([]byte, 512)
-		_, err := conn.Read(buf)
-		if err != nil {
-			checkError(err, "Reading Connection", false)
-			return
-		}
-		defer conn.Close()
-
-		Trace.Printf("Got from client: %s", strings.Trim(string(buf), "\x0a"))
-
-		msg := regexp.MustCompile(`(.*)\:(.*)\|(.*)`)
-		bits := msg.FindAllStringSubmatch(string(buf), 1)
-		if len(bits) != 0 {
-			metric = bits[0][1]
-			val = bits[0][2]
-			tmpMetricType := bits[0][3]
-			tmpMetricType = strings.TrimSpace(tmpMetricType)
-			tmpMetricType = strings.Trim(tmpMetricType, "\x00")
-			metricType, err = shortTypeToLong(tmpMetricType)
-			Trace.Printf("Metric Type Is: %v (~%v)", metricType, tmpMetricType)
+		// Process the channel as soon as requests come in. If they are valid Metric
+		// structures, we move them to a new channel to be flushed on an interval.
+		select {
+		case metricString := <-parseChannel:
+			metric, err := parseMetricString(metricString)
 			if err != nil {
-				Warning.Printf("Problem handling metric of type: %s", tmpMetricType)
+				Trace.Printf("Invalid metric: %v", metricString)
 				continue
 			}
-		} else {
-			Warning.Printf("Error processing client message: %s", string(buf))
-			return
+			Trace.Printf("Metric push: %v", metric)
+			// Push the metric onto the channel to be aggregated and flushed.
+			flushChannel <- metric
 		}
 
-		// TODO - this float parsing is ugly.
-		value, err := strconv.ParseFloat(val, 32)
-		checkError(err, "Converting Value", false)
-
-		Trace.Printf("(%s) %s => %f", metricType, metric, value)
-
-		store.Set(metric, metricType, float32(value))
 	}
 }
 
-func flushMetrics(store *MetricStore) {
-	flushTicker := time.Tick(*flushTime)
-	Info.Printf("Flushing every %v", *flushTime)
+// Parses a metric string, and if it is properly constructed, create a Metric
+// structure. Expects the format [namespace]:[value]|[type]
+func parseMetricString(metricString string) (*Metric, error) {
+	var metric = new(Metric)
+
+	// First extract the first element which is the namespace.
+	split1 := strings.Split(metricString, SeparatorNamespaceValue)
+	if len(split1) == 1 {
+		// We didn't find the ":" separator.
+		return metric, errors.New("Invalid data string")
+	}
+
+	// Next split the remaining string wich is the value and type.
+	split2 := strings.Split(split1[1], SeparatorValueType)
+	if len(split2) == 1 {
+		// We didn't find the "|" separator.
+		return metric, errors.New("Invalid data string")
+	}
+
+	// Locate the metric type.
+	metricType, err := shortTypeToLong(strings.TrimSpace(split2[1]))
+	if err != nil {
+		// We were unable to discern a metric type.
+		return metric, errors.New("Invalid data string")
+	}
+
+	// Parse the value as a float.
+	parsedValue, err := strconv.ParseFloat(split2[0], 32)
+	if err != nil {
+		// We were unable to find a numeric value.
+		return metric, errors.New("Invalid data string")
+	}
+
+	// The string was successfully parsed. Convert to a Metric structure.
+	metric.key = strings.TrimSpace(split1[0])
+	metric.metricType = metricType
+	metric.lastValue = float32(parsedValue)
+	metric.totalHits = 1
+
+	return metric, nil
+}
+
+// Flushes the metrics in-memory to the permanent storage facility. At this
+// point we are receiving Metric structures from a channel that need to be
+// aggregated by the specified namespace. We do this immediately, then when
+// the specified flush interval passes, we send aggregated metrics to storage.
+func flushMetrics() {
+	// Use a tick channel to determine if a flush message has arrived.
+	tick := time.Tick(*flushInterval)
+	Info.Printf("Flushing every %v", flushInterval)
+
+	// Internal storage.
+	metrics := make(map[string]Metric)
 
 	for {
+		// Process the metrics as soon as they arrive on the channel. If nothing has
+		// been added during the flush interval duration, continue the loop to allow
+		// it to flush the data.
 		select {
-		case <-flushTicker:
-			Trace.Println("Tick...")
-			for index, metric := range store.metrics {
-				Trace.Printf("Flushing %s (%s) => %g %v", index, metric.metricType, metric.lastValue, metric.allValues)
-			}
+		case metric := <-flushChannel:
+			Trace.Printf("Metric: %v", metric)
+			aggregateMetric(metrics, *metric)
+		case <-time.After(*flushInterval):
+			Trace.Println("Metric Channel Timeout")
+			// Nothing to read, attempt to flush.
+		}
 
-			for _, metric := range store.metrics {
-				flushTime := int(time.Now().Unix())
-				metric.flushTime = flushTime
-				graphitePipeline <- metric
+		// After reading from the metrics channel, we check the ticks channel. If there
+		// is a tick, flush the in-memory metrics.
+		select {
+		case <-tick:
+			Trace.Println("Tick...")
+			for key, metric := range metrics {
+				metric.flushTime = int(time.Now().Unix())
+				sendToGraphite(metric)
+				// @todo: should we delete gauges?
+				delete(metrics, key)
 			}
+		default:
+			// Flush interval hasn't passed yet.
 		}
 	}
+
 }
 
-func handleGraphiteQueue(store *MetricStore) {
-	for {
-		metric := <-graphitePipeline
-		go sendToGraphite(metric)
-		if metric.metricType != "gauge" {
-			delete(store.metrics, metric.key)
+// Adds the metric to the specified storage map or aggregates it with
+// an existing metric which has the same namespace.
+func aggregateMetric(metrics map[string]Metric, metric Metric) {
+	existingMetric, metricExists := metrics[metric.key]
+
+	// If the metric exists in the specified map, we either take the last value or
+	// sum the values and increment the hit count.
+	if metricExists {
+		existingMetric.totalHits++
+
+		switch {
+		case metric.metricType == "gauge":
+			existingMetric.lastValue = metric.lastValue
+		case metric.metricType == "counter":
+			existingMetric.lastValue += metric.lastValue
+		case metric.metricType == "timer":
+			existingMetric.lastValue = metric.lastValue
 		}
+
+		metrics[metric.key] = existingMetric
+	} else {
+		metrics[metric.key] = metric
 	}
+
+	Trace.Printf("Aggregating %v", metrics)
 }
 
 func sendToGraphite(m Metric) {
@@ -281,7 +379,7 @@ func sendToGraphite(m Metric) {
 	//Determine why this checkError wasn't working.
 	//checkError(err, "Problem sending to graphite", false)
 
-	// TODO for metrics
+	// @todo: for metrics
 	// http://blog.pkhamre.com/2012/07/24/understanding-statsd-and-graphite/
 	// Ensure all of the metrics are working correctly.
 
@@ -289,7 +387,7 @@ func sendToGraphite(m Metric) {
 		gkey = fmt.Sprintf("stats.gauges.%s.avg_value", m.key)
 		sendSingleMetricToGraphite(gkey, m.lastValue, stringTime)
 	} else if m.metricType == "counter" {
-		flushSeconds := time.Duration.Seconds(*flushTime)
+		flushSeconds := time.Duration.Seconds(*flushInterval)
 		valuePerSec := m.lastValue / float32(flushSeconds)
 
 		gkey = fmt.Sprintf("stats.%s", m.key)
@@ -354,59 +452,6 @@ func sendToGraphite(m Metric) {
 
 	gkey = fmt.Sprintf("stats.timers.%s.sum_%d", m.key, *percentile)
 	sendSingleMetricToGraphite(gkey, cumulativeValues[numInThreshold-1], stringTime)
-}
-
-// NewMetricStore Initialize the metric store.
-func NewMetricStore() *MetricStore {
-	return &MetricStore{metrics: make(map[string]Metric)}
-}
-
-// Get will return a metric from inside the store.
-func (s *MetricStore) Get(key string) Metric {
-	// TODO - investigate this never running. NOTE: Set doesn't run Get.
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	m := s.metrics[key]
-	return m
-}
-
-// Set will store or update a metric.
-func (s *MetricStore) Set(key string, metricType string, val float32) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	m, existingMetric := s.metrics[key]
-
-	if !existingMetric {
-		m.key = key
-		m.totalHits = 1
-		m.lastValue = val
-		m.metricType = metricType
-
-		switch {
-		case metricType == "gauge":
-		case metricType == "counter":
-		case metricType == "timer":
-		}
-	} else {
-		m.totalHits++
-
-		switch {
-		case metricType == "gauge":
-			m.lastValue = val
-		case metricType == "counter":
-			m.lastValue += val
-		case metricType == "timer":
-			m.lastValue = val
-		}
-
-	}
-
-	// TODO: should we bother trackin this for counters?
-	m.allValues = append(m.allValues, val)
-	s.metrics[key] = m
-
-	return false
 }
 
 // sendSingleMetricToGraphite formats a message and a value and time and sends to Graphite.
