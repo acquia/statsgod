@@ -62,8 +62,10 @@ var config = flag.String("config", "config.yml", "YAML config file path")
 var debug = flag.Bool("debug", false, "Debugging mode")
 var host = flag.String("host", "localhost", "Hostname")
 var port = flag.Int("port", 8125, "Port")
-var graphiteHost = flag.String("graphiteHost", "localhost", "Graphite Hostname")
-var graphitePort = flag.Int("graphitePort", 5001, "Graphite Port")
+var carbonHost = flag.String("carbonHost", "localhost", "Carbon Hostname")
+var carbonPort = flag.Int("carbonPort", 5001, "Carbon Port")
+var relayConcurrency = flag.Int("relayConcurrency", 1, "Simultaneous Relay Connections")
+var relayTimeout = flag.Duration("relayTimeout", 20*time.Second, "Socket timeout to carbon relay.")
 var flushInterval = flag.Duration("flushInterval", 10*time.Second, "Flush time")
 var percentile = flag.Int("percentile", 90, "Percentile")
 var relay = flag.String("relay", "carbon", "Relay type, one of 'carbon' or 'mock'")
@@ -90,11 +92,14 @@ func main() {
 	// Set up the backend relay.
 	switch *relay {
 	case "carbon":
+		// Create a relay to carbon.
 		relay := statsgod.CreateRelay("carbon").(*statsgod.CarbonRelay)
 		relay.FlushInterval = *flushInterval
 		relay.Percentile = *percentile
-		relay.GraphiteHost = *graphiteHost
-		relay.GraphitePort = *graphitePort
+		// Create a connection pool for the relay to use.
+		pool, err := statsgod.CreateConnectionPool(*relayConcurrency, *carbonHost, *carbonPort, *relayTimeout, logger)
+		checkError(err, "Creating connection pool", true)
+		relay.ConnectionPool = pool
 		backendRelay = statsgod.MetricRelay(relay)
 		logger.Info.Println("Relaying metrics to carbon backend")
 	default:
@@ -115,7 +120,9 @@ func main() {
 	go parseMetrics(logger)
 
 	// Flush the metrics to the remote stats collector.
-	go flushMetrics(logger)
+	for i := 0; i < *relayConcurrency; i++ {
+		go flushMetrics(logger)
+	}
 
 	for {
 		conn, err := listener.Accept()
@@ -160,12 +167,22 @@ func loadConfig(c string) map[interface{}]interface{} {
 		*port = m["port"].(int)
 	}
 
-	if m["graphiteHost"] != nil && touchedFlags["graphiteHost"] != 1 {
-		*graphiteHost = m["graphiteHost"].(string)
+	if m["carbonHost"] != nil && touchedFlags["carbonHost"] != 1 {
+		*carbonHost = m["carbonHost"].(string)
 	}
 
-	if m["graphitePort"] != nil && touchedFlags["graphitePort"] != 1 {
-		*graphitePort = m["graphitePort"].(int)
+	if m["carbonPort"] != nil && touchedFlags["carbonPort"] != 1 {
+		*carbonPort = m["carbonPort"].(int)
+	}
+
+	if m["relayConcurrency"] != nil && touchedFlags["relayConcurrency"] != 1 {
+		*relayConcurrency = m["relayConcurrency"].(int)
+	}
+
+	if m["relayTimeout"] != nil && touchedFlags["relayTimeout"] != 1 {
+		rt, err := time.ParseDuration(m["relayTimeout"].(string))
+		checkError(err, "Could not parse relayTimeout", true)
+		*relayTimeout = rt
 	}
 
 	if m["percentile"] != nil && touchedFlags["percentile"] != 1 {
@@ -219,7 +236,6 @@ func parseMetrics(logger statsgod.Logger) {
 				logger.Trace.Printf("Invalid metric: %v", metricString)
 				continue
 			}
-			logger.Trace.Printf("Metric push: %v", metric)
 			// Push the metric onto the channel to be aggregated and flushed.
 			flushChannel <- metric
 		}
@@ -245,8 +261,8 @@ func flushMetrics(logger statsgod.Logger) {
 		// it to flush the data.
 		select {
 		case metric := <-flushChannel:
-			logger.Trace.Printf("Metric: %v", metric)
 			statsgod.AggregateMetric(metrics, *metric)
+			logger.Trace.Printf("Metric: %v", metrics[metric.Key])
 		case <-time.After(*flushInterval):
 			logger.Trace.Println("Metric Channel Timeout")
 			// Nothing to read, attempt to flush.
