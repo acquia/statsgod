@@ -1,7 +1,7 @@
 statsgod
 ========
 
-[![Build Status](https://travis-ci.org/syrneus/statsgod.svg?branch=master)](https://travis-ci.org/syrneus/statsgod)
+[![Build Status](https://travis-ci.org/acquia/statsgod.svg?branch=master)](https://travis-ci.org/acquia/statsgod)
 
 Statsgod is an experimental Go implementation (or deviation) of Etsy's statsd service.  It does not yet support all statsd configuration options or other capabilities and has not yet been performance tested. All of the metric types are not yet thoroughly tested.
 
@@ -13,13 +13,14 @@ The original statsd was written in node.js. This version is written in Go and ut
 ```
 Usage:  statsgod [args]
  -config configfile		configuration yaml file to process
- -host host				host to listen on
- -port port				port to listen on
+ -host host			host to listen on
+ -port port			port to listen on
  -graphiteHost 			remotehost: remote host to send data to
  -graphitePort 			remoteport: remote port to send data to
  -flushInterval 		flush interval: interval for the metrics to be flushed. default 10s
  -percentile 			percentile: which percentile we want to track for metrics
- -debug 				debug mode
+ -debug 			debug mode
+ -backend 			Backend type, one of 'carbon' or 'dummy'
 ```
 
 ### Example:
@@ -40,9 +41,9 @@ Usage:  statsgod [args]
 To download all dependencies and compile statsgod
 
 	go get -u github.com/mattn/gom
-	mkdir -p $GOPATH/src/github.com/syrneus/statsgod
-	git clone https://github.com/syrneus/statsgod $GOPATH/src/github.com/syrneus/statsgod
-	cd $GOPATH/src/github.com/syrneus/statsgod
+	mkdir -p $GOPATH/src/github.com/acquia/statsgod
+	git clone https://github.com/acquia/statsgod $GOPATH/src/github.com/acquia/statsgod
+	cd $GOPATH/src/github.com/acquia/statsgod
 	gom install
 	gom build -o $GOPATH/bin/statsgod
 
