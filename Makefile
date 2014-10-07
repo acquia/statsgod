@@ -1,6 +1,6 @@
 project=statsgod
 
-PACKAGES=generator receiver
+PACKAGES=generator receiver statsgod
 
 export PATH := $(abspath ./_vendor/bin):$(PATH)
 
@@ -27,8 +27,10 @@ deps:
 test: deps
 	$(GOM) exec go fmt ./...
 	$(GOM) exec go vet -x ./...
-	$(GOM) exec golint $(PACKAGES:%=./%)
+	$(GOM) exec golint .
+	$(foreach p, $(PACKAGES), $(GOM) exec golint ./$(p)/.; )
 	$(GOM) exec go test -covermode=count -coverprofile=coverage.out .
+	$(GOM) exec go test -covermode=count -coverprofile=coverage.out ./statsgod/.
 
 recv:
 	go run -race receiver/test_receiver.go
