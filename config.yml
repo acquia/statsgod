@@ -7,13 +7,19 @@ port:  8125
 debug: false
 
 ###
-# Backend graphite server configuration
+# Backend relay carbon server configuration
 ###
-graphiteHost: localhost
-graphitePost: 5001
+carbonHost: localhost
+carbonPort: 5001
+
+###
+# Relay connection options
+###
+relayConcurrency: 1
+relayTimeout: 20s
 
 ###
 # Flush options
 ###
-flushTime: 10s
+flushInterval: 10s
 percentile: 80

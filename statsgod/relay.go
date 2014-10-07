@@ -21,7 +21,6 @@ package statsgod
 import (
 	"fmt"
 	"math"
-	"net"
 	"sort"
 	"strconv"
 	"time"
@@ -45,10 +44,9 @@ func CreateRelay(relayType string) MetricRelay {
 
 // CarbonRelay implements MetricRelay.
 type CarbonRelay struct {
-	FlushInterval time.Duration
-	Percentile    int
-	GraphiteHost  string
-	GraphitePort  int
+	FlushInterval  time.Duration
+	Percentile     int
+	ConnectionPool *ConnectionPool
 }
 
 // Relay implements MetricRelay::Relay().
@@ -69,19 +67,19 @@ func sendToGraphite(m Metric, c CarbonRelay, logger Logger) {
 
 	if m.MetricType == "gauge" {
 		gkey = fmt.Sprintf("stats.gauges.%s.avg_value", m.Key)
-		sendSingleMetricToGraphite(gkey, m.LastValue, stringTime, c, logger)
+		sendSingleMetricToGraphite(gkey, m.LastValue, stringTime, true, c, logger)
 	} else if m.MetricType == "counter" {
 		flushSeconds := time.Duration.Seconds(c.FlushInterval)
 		valuePerSec := m.LastValue / float32(flushSeconds)
 
 		gkey = fmt.Sprintf("stats.%s", m.Key)
-		sendSingleMetricToGraphite(gkey, valuePerSec, stringTime, c, logger)
+		sendSingleMetricToGraphite(gkey, valuePerSec, stringTime, true, c, logger)
 
 		gkey = fmt.Sprintf("stats_counts.%s", m.Key)
-		sendSingleMetricToGraphite(gkey, m.LastValue, stringTime, c, logger)
+		sendSingleMetricToGraphite(gkey, m.LastValue, stringTime, true, c, logger)
 	}
 
-	sendSingleMetricToGraphite(m.Key, m.LastValue, stringTime, c, logger)
+	sendSingleMetricToGraphite(m.Key, m.LastValue, stringTime, true, c, logger)
 
 	if m.MetricType != "timer" {
 		logger.Trace.Println("Not a timer, so skipping additional graphite points")
@@ -108,13 +106,13 @@ func sendToGraphite(m Metric, c CarbonRelay, logger Logger) {
 	avgValue := sum / float32(m.TotalHits)
 
 	gkey = fmt.Sprintf("stats.timers.%s.avg_value", m.Key)
-	sendSingleMetricToGraphite(gkey, avgValue, stringTime, c, logger)
+	sendSingleMetricToGraphite(gkey, avgValue, stringTime, true, c, logger)
 
 	gkey = fmt.Sprintf("stats.timers.%s.max_value", m.Key)
-	sendSingleMetricToGraphite(gkey, maxValue, stringTime, c, logger)
+	sendSingleMetricToGraphite(gkey, maxValue, stringTime, true, c, logger)
 
 	gkey = fmt.Sprintf("stats.timers.%s.min_value", m.Key)
-	sendSingleMetricToGraphite(gkey, minValue, stringTime, c, logger)
+	sendSingleMetricToGraphite(gkey, minValue, stringTime, true, c, logger)
 	// All of the percentile based value calculations.
 
 	thresholdIndex := int(math.Floor((((100 - float64(c.Percentile)) / 100) * float64(m.TotalHits)) + 0.5))
@@ -129,33 +127,55 @@ func sendToGraphite(m Metric, c CarbonRelay, logger Logger) {
 	meanAtPercentile := cumulativeValues[numInThreshold-1] / float32(numInThreshold)
 
 	gkey = fmt.Sprintf("stats.timers.%s.mean_%d", m.Key, c.Percentile)
-	sendSingleMetricToGraphite(gkey, meanAtPercentile, stringTime, c, logger)
+	sendSingleMetricToGraphite(gkey, meanAtPercentile, stringTime, true, c, logger)
 
 	gkey = fmt.Sprintf("stats.timers.%s.upper_%d", m.Key, c.Percentile)
-	sendSingleMetricToGraphite(gkey, maxAtThreshold, stringTime, c, logger)
+	sendSingleMetricToGraphite(gkey, maxAtThreshold, stringTime, true, c, logger)
 
 	gkey = fmt.Sprintf("stats.timers.%s.sum_%d", m.Key, c.Percentile)
-	sendSingleMetricToGraphite(gkey, cumulativeValues[numInThreshold-1], stringTime, c, logger)
+	sendSingleMetricToGraphite(gkey, cumulativeValues[numInThreshold-1], stringTime, true, c, logger)
 }
 
 // sendSingleMetricToGraphite formats a message and a value and time and sends to Graphite.
-func sendSingleMetricToGraphite(key string, v float32, t string, c CarbonRelay, logger Logger) {
-	fmt.Printf("host %v", c.GraphiteHost)
-	fmt.Printf("host %v", c.GraphitePort)
-	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", c.GraphiteHost, c.GraphitePort))
-	if err != nil {
-		logger.Error.Println("Could not connect to remote graphite server")
-		return
-	}
-
-	defer conn.Close()
+func sendSingleMetricToGraphite(key string, v float32, t string, retry bool, relay CarbonRelay, logger Logger) {
+	var releaseErr error
+	dataSent := false
 
 	sv := strconv.FormatFloat(float64(v), 'f', 6, 32)
 	payload := fmt.Sprintf("%s %s %s", key, sv, t)
-	logger.Trace.Printf("Payload: %v", payload)
 
-	// Send to the connection
-	fmt.Fprintf(conn, fmt.Sprintf("%s %v %s\n", key, sv, t))
+	// Send to the remote host.
+	conn, connErr := relay.ConnectionPool.GetConnection(logger)
+
+	if connErr != nil {
+		logger.Error.Println("Could not connect to remote host.", connErr)
+		// If there was an error connecting, recreate the connection and retry.
+		_, releaseErr = relay.ConnectionPool.ReleaseConnection(conn, true, logger)
+	} else {
+		// Write to the connection.
+		_, writeErr := fmt.Fprintf(conn, fmt.Sprintf("%s\n", payload))
+		if writeErr != nil {
+			// If there was an error writing, recreate the connection and retry.
+			logger.Error.Printf("%v", writeErr)
+			_, releaseErr = relay.ConnectionPool.ReleaseConnection(conn, true, logger)
+		} else {
+			// If the metric was written, just release that connection back.
+			logger.Trace.Printf("Payload: %v", payload)
+			_, releaseErr = relay.ConnectionPool.ReleaseConnection(conn, false, logger)
+			dataSent = true
+		}
+	}
+
+	// For some reason we were unable to release this connection.
+	if releaseErr != nil {
+		logger.Error.Println("Relay connection not released.", releaseErr)
+	}
+
+	// If data was not sent, likely a socket timeout, we'll retry one time.
+	if !dataSent && retry {
+		logger.Error.Printf("Metric not sent, retrying %v", payload)
+		sendSingleMetricToGraphite(key, v, t, false, relay, logger)
+	}
 }
 
 // ByFloat32 implements sort.Interface for []Float32.

@@ -106,7 +106,8 @@ func generateMetricNames(numMetrics int) []Metric {
 
 	for i := 0; i < numMetrics; i++ {
 		newMetricName, _ := randutil.String(20, randutil.Alphabet)
-		store = append(store, Metric{key: newMetricName, metricType: metricTypes[r.Intn(len(metricTypes))]})
+		newMetricNS := fmt.Sprintf("statsgod.test.%s", newMetricName)
+		store = append(store, Metric{key: newMetricNS, metricType: metricTypes[r.Intn(len(metricTypes))]})
 	}
 
 	return store

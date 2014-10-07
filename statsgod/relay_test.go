@@ -44,6 +44,6 @@ func TestCarbonRelayStructure(t *testing.T) {
 	backendRelay := CreateRelay("carbon").(*CarbonRelay)
 	assert.NotNil(t, backendRelay.FlushInterval)
 	assert.NotNil(t, backendRelay.Percentile)
-	assert.NotNil(t, backendRelay.GraphiteHost)
-	assert.NotNil(t, backendRelay.GraphitePort)
+	// At this point the connection pool has not been established.
+	assert.Nil(t, backendRelay.ConnectionPool)
 }
