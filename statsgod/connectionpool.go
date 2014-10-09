@@ -56,7 +56,7 @@ func CreateConnectionPool(size int, host string, port int, timeout time.Duration
 	}
 
 	if errorCount > 0 {
-		err := errors.New(fmt.Sprintf("%d connections failed.", errorCount))
+		err := fmt.Errorf("%d connections failed", errorCount)
 		return pool, err
 	}
 
