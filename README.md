@@ -12,15 +12,17 @@ The original statsd was written in node.js. This version is written in Go and ut
 ---
 ```
 Usage:  statsgod [args]
- -config configfile		configuration yaml file to process
- -host host			host to listen on
- -port port			port to listen on
- -graphiteHost 			remotehost: remote host to send data to
- -graphitePort 			remoteport: remote port to send data to
- -flushInterval 		flush interval: interval for the metrics to be flushed. default 10s
- -percentile 			percentile: which percentile we want to track for metrics
- -debug 			debug mode
- -backend 			Backend type, one of 'carbon' or 'dummy'
+ -carbonHost="localhost": Carbon Hostname
+ -carbonPort=5001: Carbon Port
+ -config="config.yml": YAML config file path
+ -debug=false: Debugging mode
+ -flushInterval=10s: Flush time
+ -host="localhost": Hostname
+ -percentile=90: Percentile
+ -port=8125: Port
+ -relay="carbon": Relay type, one of 'carbon' or 'mock'
+ -relayConcurrency=1: Simultaneous Relay Connections
+ -relayTimeout=20s: Socket timeout to carbon relay.
 ```
 
 ### Example:
