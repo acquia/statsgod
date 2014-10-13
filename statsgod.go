@@ -34,7 +34,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"github.com/acquia/statsgod/statsgod"
 	"gopkg.in/yaml.v1"
 	"io/ioutil"
@@ -63,11 +62,13 @@ var flushChannel = make(chan *statsgod.Metric, MaxReqs)
 var config = flag.String("config", "config.yml", "YAML config file path")
 var debug = flag.Bool("debug", false, "Debugging mode")
 var host = flag.String("host", "localhost", "Hostname")
-var port = flag.Int("port", 8125, "Port")
+var portTcp = flag.Int("portTcp", 8125, "TCP Port")
+var portUdp = flag.Int("portUdp", 8126, "UDP Port")
+var socket = flag.String("socket", "/tmp/statsgod.sock", "Location of socket file")
 var carbonHost = flag.String("carbonHost", "localhost", "Carbon Hostname")
 var carbonPort = flag.Int("carbonPort", 5001, "Carbon Port")
 var relayConcurrency = flag.Int("relayConcurrency", 1, "Simultaneous Relay Connections")
-var relayTimeout = flag.Duration("relayTimeout", 20*time.Second, "Socket timeout to carbon relay.")
+var relayTimeout = flag.Duration("relayTimeout", 30*time.Second, "Socket timeout to carbon relay.")
 var flushInterval = flag.Duration("flushInterval", 10*time.Second, "Flush time")
 var percentile = flag.Int("percentile", 90, "Percentile")
 var relay = flag.String("relay", "carbon", "Relay type, one of 'carbon' or 'mock'")
@@ -110,14 +111,6 @@ func main() {
 		logger.Info.Println("Relaying metrics to mock backend")
 	}
 
-	addr := fmt.Sprintf("%s:%d", *host, *port)
-	logger.Info.Printf("Starting stats server on %s", addr)
-
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		checkError(err, "Starting Server", true)
-	}
-
 	// Parse the incoming messages and convert to metrics.
 	go parseMetrics(logger)
 
@@ -126,14 +119,21 @@ func main() {
 		go flushMetrics(logger)
 	}
 
-	for {
-		conn, err := listener.Accept()
-		// @todo: handle errors with one client gracefully.
-		if err != nil {
-			checkError(err, "Accepting Connection", false)
-		}
-		go handleTcpRequest(conn, logger)
-	}
+	socketTcp := statsgod.CreateSocket(statsgod.SocketTypeTcp).(*statsgod.SocketTcp)
+	socketTcp.Host = *host
+	socketTcp.Port = *portTcp
+	go socketTcp.Listen(parseChannel, logger)
+
+	socketUdp := statsgod.CreateSocket(statsgod.SocketTypeUdp).(*statsgod.SocketUdp)
+	socketUdp.Host = *host
+	socketUdp.Port = *portUdp
+	go socketUdp.Listen(parseChannel, logger)
+
+	socketUnix := statsgod.CreateSocket(statsgod.SocketTypeUnix).(*statsgod.SocketUnix)
+	socketUnix.Sock = *socket
+	go socketUnix.Listen(parseChannel, logger)
+
+	select {}
 }
 
 func loadConfig(c string) map[interface{}]interface{} {
@@ -165,8 +165,16 @@ func loadConfig(c string) map[interface{}]interface{} {
 		*host = m["host"].(string)
 	}
 
-	if m["port"] != nil && touchedFlags["port"] != 1 {
-		*port = m["port"].(int)
+	if m["portTcp"] != nil && touchedFlags["portTcp"] != 1 {
+		*portTcp = m["portTcp"].(int)
+	}
+
+	if m["portUdp"] != nil && touchedFlags["portUdp"] != 1 {
+		*portUdp = m["portUdp"].(int)
+	}
+
+	if m["socket"] != nil && touchedFlags["socket"] != 1 {
+		*socket = m["socket"].(string)
 	}
 
 	if m["carbonHost"] != nil && touchedFlags["carbonHost"] != 1 {
