@@ -17,8 +17,11 @@
 package statsgod
 
 import (
+	"fmt"
 	"github.com/stretchr/testify/assert"
+	"io/ioutil"
 	"testing"
+	"time"
 )
 
 // Creates a Metric struct with default values.
@@ -75,6 +78,51 @@ func TestAggregateMetric(t *testing.T) {
 	assert.Equal(t, existingMetric.TotalHits, 2)
 	assert.Equal(t, existingMetric.LastValue, 3)
 	assert.Equal(t, len(existingMetric.AllValues), 2)
+}
+
+// Test the ProcessMetric function.
+func TestProcessMetric(t *testing.T) {
+	logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
+	metrics := make(map[string]Metric)
+
+	// Test that counters aggregate and process properly.
+	for i := 0; i < 11; i++ {
+		metricCount, _ := ParseMetricString("test.count:1|c")
+		AggregateMetric(metrics, *metricCount)
+	}
+	metricCount := metrics["test.count"]
+	ProcessMetric(&metricCount, time.Second*10, float64(0.8), logger)
+	assert.Equal(t, metricCount.ValuesPerSecond, 1.1)
+	assert.Equal(t, metricCount.LastValue, float64(11))
+
+	// Test that gauges average properly.
+	for i := 1; i < 11; i++ {
+		gauge := float64(i) * float64(i)
+		metricGauge, _ := ParseMetricString(fmt.Sprintf("test.gauge:%f|g", gauge))
+		AggregateMetric(metrics, *metricGauge)
+	}
+	metricGauge := metrics["test.gauge"]
+	ProcessMetric(&metricGauge, time.Second*10, float64(0.8), logger)
+	assert.Equal(t, metricGauge.MedianValue, 30.5)
+	assert.Equal(t, metricGauge.MeanValue, 38.5)
+	assert.Equal(t, metricGauge.LastValue, 100.0)
+
+	// Test all of the timer calculations.
+	for i := 3; i < 14; i++ {
+		timer := float64(i) * float64(i)
+		metricTimer, _ := ParseMetricString(fmt.Sprintf("test.timer:%f|ms", timer))
+		AggregateMetric(metrics, *metricTimer)
+	}
+	metricTimer := metrics["test.timer"]
+	ProcessMetric(&metricTimer, time.Second*10, float64(0.9), logger)
+	assert.Equal(t, metricTimer.MinValue, float64(9))
+	assert.Equal(t, metricTimer.MaxValue, float64(169))
+	assert.Equal(t, metricTimer.MeanValue, float64(74))
+	assert.Equal(t, metricTimer.MedianValue, float64(64))
+	assert.Equal(t, metricTimer.MeanInThreshold, float64(64.5))
+	assert.Equal(t, metricTimer.MaxInThreshold, float64(144))
+	assert.Equal(t, metricTimer.SumInThreshold, float64(645))
+	assert.Equal(t, metricTimer.LastValue, float64(169))
 }
 
 // Test the ParseMetricString() function.

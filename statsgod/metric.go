@@ -20,8 +20,10 @@ package statsgod
 
 import (
 	"errors"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -35,13 +37,21 @@ const (
 
 // Metric is our main data type.
 type Metric struct {
-	Key         string    // Name of the metric.
-	MetricType  string    // What type of metric is it (gauge, counter, timer)
-	TotalHits   int       // Number of times it has been used.
-	LastValue   float32   // The last value stored.
-	AllValues   []float32 // All of the values.
-	FlushTime   int       // What time are we sending Graphite?
-	LastFlushed int       // When did we last flush this out?
+	Key             string     // Name of the metric.
+	MetricType      string     // What type of metric is it (gauge, counter, timer)
+	TotalHits       int        // Number of times it has been used.
+	LastValue       float64    // The last value stored.
+	ValuesPerSecond float64    // The number of values per second.
+	MinValue        float64    // The min value.
+	MaxValue        float64    // The max value.
+	MeanValue       float64    // The cumulative mean.
+	MedianValue     float64    // The cumulative median.
+	MeanInThreshold float64    // The mean average within the threshold.
+	MaxInThreshold  float64    // The max value within the threshold.
+	SumInThreshold  float64    // The total within the threshold
+	AllValues       ValueSlice // All of the values.
+	FlushTime       int        // What time are we sending Graphite?
+	LastFlushed     int        // When did we last flush this out?
 }
 
 // ParseMetricString parses a metric string, and if it is properly constructed,
@@ -80,7 +90,7 @@ func ParseMetricString(metricString string) (*Metric, error) {
 	// The string was successfully parsed. Convert to a Metric structure.
 	metric.Key = strings.TrimSpace(split1[0])
 	metric.MetricType = MetricType
-	metric.LastValue = float32(parsedValue)
+	metric.LastValue = parsedValue
 	metric.AllValues = append(metric.AllValues, metric.LastValue)
 	metric.TotalHits = 1
 
@@ -111,6 +121,38 @@ func AggregateMetric(metrics map[string]Metric, metric Metric) {
 		metrics[metric.Key] = existingMetric
 	} else {
 		metrics[metric.Key] = metric
+	}
+}
+
+// ProcessMetric will create additional calculations based on the type of metric.
+func ProcessMetric(metric *Metric, flushDuration time.Duration, quantile float64, logger Logger) {
+	flushInterval := flushDuration / time.Second
+
+	sort.Sort(metric.AllValues)
+	switch metric.MetricType {
+	case "counter":
+		metric.ValuesPerSecond = float64(len(metric.AllValues)) / float64(flushInterval)
+	case "timer":
+		metric.MinValue, metric.MaxValue, _ = metric.AllValues.Minmax()
+
+		// Make calculations based on the desired quantile.
+		quantileValue := metric.AllValues.Quantile(quantile)
+		quantileTotal := float64(0)
+		quantileCount := int(0)
+		for _, value := range metric.AllValues {
+			if value > quantileValue {
+				break
+			}
+			quantileTotal += value
+			quantileCount++
+		}
+		metric.MaxInThreshold = quantileValue
+		metric.MeanInThreshold = quantileTotal / float64(quantileCount)
+		metric.SumInThreshold = quantileTotal
+		fallthrough
+	default:
+		metric.MedianValue = metric.AllValues.Median()
+		metric.MeanValue = metric.AllValues.Mean()
 	}
 }
 
