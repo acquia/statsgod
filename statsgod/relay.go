@@ -22,8 +22,6 @@ package statsgod
 
 import (
 	"fmt"
-	"math"
-	"sort"
 	"strconv"
 	"time"
 )
@@ -58,6 +56,9 @@ func (c CarbonRelay) Relay(metric Metric, logger Logger) {
 
 // sendToGraphite sends the metric to the specified host/port.
 func sendToGraphite(m Metric, c CarbonRelay, logger Logger) {
+	quantile := float64(c.Percentile) / float64(100)
+	ProcessMetric(&m, c.FlushInterval, quantile, logger)
+	// @todo: are we ever setting flush time?
 	stringTime := strconv.Itoa(m.FlushTime)
 	var gkey string
 
@@ -67,79 +68,45 @@ func sendToGraphite(m Metric, c CarbonRelay, logger Logger) {
 	// http://blog.pkhamre.com/2012/07/24/understanding-statsd-and-graphite/
 	// Ensure all of the metrics are working correctly.
 
-	if m.MetricType == "gauge" {
-		gkey = fmt.Sprintf("stats.gauges.%s.avg_value", m.Key)
+	switch m.MetricType {
+	case "gauge":
+		gkey = fmt.Sprintf("stats.gauges.%s", m.Key)
 		sendSingleMetricToGraphite(gkey, m.LastValue, stringTime, true, c, logger)
-	} else if m.MetricType == "counter" {
-		flushSeconds := time.Duration.Seconds(c.FlushInterval)
-		valuePerSec := m.LastValue / float32(flushSeconds)
-
+	case "counter":
 		gkey = fmt.Sprintf("stats.%s", m.Key)
-		sendSingleMetricToGraphite(gkey, valuePerSec, stringTime, true, c, logger)
+		sendSingleMetricToGraphite(gkey, m.ValuesPerSecond, stringTime, true, c, logger)
 
 		gkey = fmt.Sprintf("stats_counts.%s", m.Key)
 		sendSingleMetricToGraphite(gkey, m.LastValue, stringTime, true, c, logger)
+	case "timer":
+		// Cumulative values.
+		gkey = fmt.Sprintf("stats.timers.%s.mean_value", m.Key)
+		sendSingleMetricToGraphite(gkey, m.MeanValue, stringTime, true, c, logger)
+
+		gkey = fmt.Sprintf("stats.timers.%s.median_value", m.Key)
+		sendSingleMetricToGraphite(gkey, m.MedianValue, stringTime, true, c, logger)
+
+		gkey = fmt.Sprintf("stats.timers.%s.max_value", m.Key)
+		sendSingleMetricToGraphite(gkey, m.MaxValue, stringTime, true, c, logger)
+
+		gkey = fmt.Sprintf("stats.timers.%s.min_value", m.Key)
+		sendSingleMetricToGraphite(gkey, m.MinValue, stringTime, true, c, logger)
+
+		// Quantile values.
+		gkey = fmt.Sprintf("stats.timers.%s.mean_%d", m.Key, c.Percentile)
+		sendSingleMetricToGraphite(gkey, m.MeanInThreshold, stringTime, true, c, logger)
+
+		gkey = fmt.Sprintf("stats.timers.%s.upper_%d", m.Key, c.Percentile)
+		sendSingleMetricToGraphite(gkey, m.MaxInThreshold, stringTime, true, c, logger)
+
+		gkey = fmt.Sprintf("stats.timers.%s.sum_%d", m.Key, c.Percentile)
+		sendSingleMetricToGraphite(gkey, m.SumInThreshold, stringTime, true, c, logger)
 	}
 
-	sendSingleMetricToGraphite(m.Key, m.LastValue, stringTime, true, c, logger)
-
-	if m.MetricType != "timer" {
-		logger.Trace.Println("Not a timer, so skipping additional graphite points")
-		return
-	}
-
-	// Handle timer specific calls.
-	sort.Sort(ByFloat32(m.AllValues))
-	logger.Trace.Printf("Sorted Vals: %v", m.AllValues)
-
-	// Calculate the math values for the timer.
-	minValue := m.AllValues[0]
-	maxValue := m.AllValues[len(m.AllValues)-1]
-
-	sum := float32(0)
-	cumulativeValues := []float32{minValue}
-	for idx, value := range m.AllValues {
-		sum += value
-
-		if idx != 0 {
-			cumulativeValues = append(cumulativeValues, cumulativeValues[idx-1]+value)
-		}
-	}
-	avgValue := sum / float32(m.TotalHits)
-
-	gkey = fmt.Sprintf("stats.timers.%s.avg_value", m.Key)
-	sendSingleMetricToGraphite(gkey, avgValue, stringTime, true, c, logger)
-
-	gkey = fmt.Sprintf("stats.timers.%s.max_value", m.Key)
-	sendSingleMetricToGraphite(gkey, maxValue, stringTime, true, c, logger)
-
-	gkey = fmt.Sprintf("stats.timers.%s.min_value", m.Key)
-	sendSingleMetricToGraphite(gkey, minValue, stringTime, true, c, logger)
-	// All of the percentile based value calculations.
-
-	thresholdIndex := int(math.Floor((((100 - float64(c.Percentile)) / 100) * float64(m.TotalHits)) + 0.5))
-	numInThreshold := m.TotalHits - thresholdIndex
-
-	maxAtThreshold := m.AllValues[numInThreshold-1]
-	logger.Trace.Printf("Key: %s | Total Vals: %d | Threshold IDX: %d | How many in threshold? %d | Max at threshold: %f", m.Key, m.TotalHits, thresholdIndex, numInThreshold, maxAtThreshold)
-
-	logger.Trace.Printf("Cumultative Values: %v", cumulativeValues)
-
-	// Take the cumulative at the threshold and divide by the threshold idx.
-	meanAtPercentile := cumulativeValues[numInThreshold-1] / float32(numInThreshold)
-
-	gkey = fmt.Sprintf("stats.timers.%s.mean_%d", m.Key, c.Percentile)
-	sendSingleMetricToGraphite(gkey, meanAtPercentile, stringTime, true, c, logger)
-
-	gkey = fmt.Sprintf("stats.timers.%s.upper_%d", m.Key, c.Percentile)
-	sendSingleMetricToGraphite(gkey, maxAtThreshold, stringTime, true, c, logger)
-
-	gkey = fmt.Sprintf("stats.timers.%s.sum_%d", m.Key, c.Percentile)
-	sendSingleMetricToGraphite(gkey, cumulativeValues[numInThreshold-1], stringTime, true, c, logger)
 }
 
 // sendSingleMetricToGraphite formats a message and a value and time and sends to Graphite.
-func sendSingleMetricToGraphite(key string, v float32, t string, retry bool, relay CarbonRelay, logger Logger) {
+func sendSingleMetricToGraphite(key string, v float64, t string, retry bool, relay CarbonRelay, logger Logger) {
 	var releaseErr error
 	dataSent := false
 
@@ -178,17 +145,6 @@ func sendSingleMetricToGraphite(key string, v float32, t string, retry bool, rel
 		logger.Error.Printf("Metric not sent, retrying %v", payload)
 		sendSingleMetricToGraphite(key, v, t, false, relay, logger)
 	}
-}
-
-// ByFloat32 implements sort.Interface for []Float32.
-type ByFloat32 []float32
-
-func (a ByFloat32) Len() int           { return len(a) }
-func (a ByFloat32) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a ByFloat32) Less(i, j int) bool { return a[i] < a[j] }
-
-func logger(msg string) {
-	fmt.Println(msg)
 }
 
 // MockRelay implements MetricRelay.
