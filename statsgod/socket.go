@@ -57,7 +57,7 @@ type SocketTcp struct {
 	Port int
 }
 
-// Listen conforms to the Structure.Listen() interface.
+// Listen conforms to the Socket.Listen() interface.
 func (l SocketTcp) Listen(parseChannel chan string, logger Logger) {
 	if l.Host == "" || l.Port == 0 {
 		panic("Could not establish a TCP socket. Host and port must be specified.")
@@ -85,7 +85,7 @@ type SocketUdp struct {
 	Port int
 }
 
-// Listen conforms to the Structure.Listen() interface.
+// Listen conforms to the Socket.Listen() interface.
 func (l SocketUdp) Listen(parseChannel chan string, logger Logger) {
 	if l.Host == "" || l.Port == 0 {
 		panic("Could not establish a UDP socket. Host and port must be specified.")
@@ -107,7 +107,7 @@ type SocketUnix struct {
 	Sock string
 }
 
-// Listen conforms to the Structure.Listen() interface.
+// Listen conforms to the Socket.Listen() interface.
 func (l SocketUnix) Listen(parseChannel chan string, logger Logger) {
 	if l.Sock == "" {
 		panic("Could not establish a Unix socket. No sock file specified.")
