@@ -35,11 +35,8 @@ package main
 import (
 	"flag"
 	"github.com/acquia/statsgod/statsgod"
-	"gopkg.in/yaml.v1"
 	"io/ioutil"
-	"net"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -59,19 +56,8 @@ var parseChannel = make(chan string, MaxReqs)
 var flushChannel = make(chan *statsgod.Metric, MaxReqs)
 
 // CLI flags.
-var config = flag.String("config", "config.yml", "YAML config file path")
+var configFile = flag.String("config", "config.yml", "YAML config file path")
 var debug = flag.Bool("debug", false, "Debugging mode")
-var host = flag.String("host", "localhost", "Hostname")
-var portTcp = flag.Int("portTcp", 8125, "TCP Port")
-var portUdp = flag.Int("portUdp", 8126, "UDP Port")
-var socket = flag.String("socket", "/tmp/statsgod.sock", "Location of socket file")
-var carbonHost = flag.String("carbonHost", "localhost", "Carbon Hostname")
-var carbonPort = flag.Int("carbonPort", 5001, "Carbon Port")
-var relayConcurrency = flag.Int("relayConcurrency", 1, "Simultaneous Relay Connections")
-var relayTimeout = flag.Duration("relayTimeout", 30*time.Second, "Socket timeout to carbon relay.")
-var flushInterval = flag.Duration("flushInterval", 10*time.Second, "Flush time")
-var percentile = flag.Int("percentile", 90, "Percentile")
-var relay = flag.String("relay", "carbon", "Relay type, one of 'carbon' or 'mock'")
 
 var backendRelay statsgod.MetricRelay
 
@@ -81,26 +67,29 @@ func main() {
 
 	var logger statsgod.Logger
 
+	// Load the YAML config.
+	var config, _ = statsgod.LoadConfig(*configFile)
+
 	if *debug {
+		// Allow the debug flag to override config.
+		config.Service.Debug = true
 		logger = *statsgod.CreateLogger(os.Stdout, os.Stdout, os.Stdout, os.Stderr)
 		logger.Info.Println("Debugging mode enabled")
 	} else {
 		logger = *statsgod.CreateLogger(ioutil.Discard, os.Stdout, os.Stdout, os.Stderr)
 	}
 
-	// Load the YAML config.
-	c := loadConfig(*config)
-	logger.Info.Printf("Loaded Config: %v", c)
+	logger.Info.Printf("Loaded Config: %v", config)
 
 	// Set up the backend relay.
-	switch *relay {
+	switch config.Relay.Type {
 	case "carbon":
 		// Create a relay to carbon.
 		relay := statsgod.CreateRelay("carbon").(*statsgod.CarbonRelay)
-		relay.FlushInterval = *flushInterval
-		relay.Percentile = *percentile
+		relay.FlushInterval = config.Relay.Flush
+		relay.Percentile = config.Stats.Percentile
 		// Create a connection pool for the relay to use.
-		pool, err := statsgod.CreateConnectionPool(*relayConcurrency, *carbonHost, *carbonPort, *relayTimeout, logger)
+		pool, err := statsgod.CreateConnectionPool(config.Relay.Concurrency, config.Carbon.Host, config.Carbon.Port, config.Relay.Timeout, logger)
 		checkError(err, "Creating connection pool", true)
 		relay.ConnectionPool = pool
 		backendRelay = statsgod.MetricRelay(relay)
@@ -115,122 +104,25 @@ func main() {
 	go parseMetrics(logger)
 
 	// Flush the metrics to the remote stats collector.
-	for i := 0; i < *relayConcurrency; i++ {
-		go flushMetrics(logger)
+	for i := 0; i < config.Relay.Concurrency; i++ {
+		go flushMetrics(logger, config)
 	}
 
 	socketTcp := statsgod.CreateSocket(statsgod.SocketTypeTcp).(*statsgod.SocketTcp)
-	socketTcp.Host = *host
-	socketTcp.Port = *portTcp
+	socketTcp.Host = config.Connection.Tcp.Host
+	socketTcp.Port = config.Connection.Tcp.Port
 	go socketTcp.Listen(parseChannel, logger)
 
 	socketUdp := statsgod.CreateSocket(statsgod.SocketTypeUdp).(*statsgod.SocketUdp)
-	socketUdp.Host = *host
-	socketUdp.Port = *portUdp
+	socketUdp.Host = config.Connection.Udp.Host
+	socketUdp.Port = config.Connection.Udp.Port
 	go socketUdp.Listen(parseChannel, logger)
 
 	socketUnix := statsgod.CreateSocket(statsgod.SocketTypeUnix).(*statsgod.SocketUnix)
-	socketUnix.Sock = *socket
+	socketUnix.Sock = config.Connection.Unix.File
 	go socketUnix.Listen(parseChannel, logger)
 
 	select {}
-}
-
-func loadConfig(c string) map[interface{}]interface{} {
-	m := make(map[interface{}]interface{})
-
-	contents, err := ioutil.ReadFile(c)
-	checkError(err, "Config file could not be read", true)
-
-	err = yaml.Unmarshal([]byte(contents), &m)
-	checkError(err, "YAML error processing config file", true)
-
-	if m["debug"] != nil {
-		*debug = m["debug"].(bool)
-	}
-
-	touchedFlags := make(map[string]int)
-	flag.Visit(
-		func(f *flag.Flag) {
-			touchedFlags[f.Name] = 1
-		})
-
-	if m["flushInterval"] != nil && touchedFlags["flushInterval"] != 1 {
-		ft, err := time.ParseDuration(m["flushInterval"].(string))
-		checkError(err, "Could not parse flushInterval", true)
-		*flushInterval = ft
-	}
-
-	if m["host"] != nil && touchedFlags["host"] != 1 {
-		*host = m["host"].(string)
-	}
-
-	if m["portTcp"] != nil && touchedFlags["portTcp"] != 1 {
-		*portTcp = m["portTcp"].(int)
-	}
-
-	if m["portUdp"] != nil && touchedFlags["portUdp"] != 1 {
-		*portUdp = m["portUdp"].(int)
-	}
-
-	if m["socket"] != nil && touchedFlags["socket"] != 1 {
-		*socket = m["socket"].(string)
-	}
-
-	if m["carbonHost"] != nil && touchedFlags["carbonHost"] != 1 {
-		*carbonHost = m["carbonHost"].(string)
-	}
-
-	if m["carbonPort"] != nil && touchedFlags["carbonPort"] != 1 {
-		*carbonPort = m["carbonPort"].(int)
-	}
-
-	if m["relayConcurrency"] != nil && touchedFlags["relayConcurrency"] != 1 {
-		*relayConcurrency = m["relayConcurrency"].(int)
-	}
-
-	if m["relayTimeout"] != nil && touchedFlags["relayTimeout"] != 1 {
-		rt, err := time.ParseDuration(m["relayTimeout"].(string))
-		checkError(err, "Could not parse relayTimeout", true)
-		*relayTimeout = rt
-	}
-
-	if m["percentile"] != nil && touchedFlags["percentile"] != 1 {
-		*percentile = m["percentile"].(int)
-	}
-
-	if m["relay"] != nil && touchedFlags["relay"] != 1 {
-		*relay = m["relay"].(string)
-	}
-
-	return m
-}
-
-// Processes the TCP data as quickly as possible, moving it onto a channel
-// and returning immediately. At this phase, we aren't worried about malformed
-// strings, we just want to collect them.
-func handleTcpRequest(conn net.Conn, logger statsgod.Logger) {
-
-	// Read the data from the connection.
-	buf := make([]byte, 512)
-	_, err := conn.Read(buf)
-	if err != nil {
-		checkError(err, "Reading Connection", false)
-		return
-	}
-	defer conn.Close()
-
-	// As long as we have some data, submit it for processing Don't
-	// validate or parse it yet, just get the message on the channel asap.
-	// so that we can free up the connection.
-	if len(string(buf)) != 0 {
-		parseChannel <- strings.TrimSpace(strings.Trim(string(buf), "\x00"))
-	} else {
-		logger.Warning.Printf("Error processing client message: %s", string(buf))
-		return
-	}
-
-	conn.Write([]byte(""))
 }
 
 // Parses the strings received from clients and creates Metric structures.
@@ -257,10 +149,10 @@ func parseMetrics(logger statsgod.Logger) {
 // point we are receiving Metric structures from a channel that need to be
 // aggregated by the specified namespace. We do this immediately, then when
 // the specified flush interval passes, we send aggregated metrics to storage.
-func flushMetrics(logger statsgod.Logger) {
+func flushMetrics(logger statsgod.Logger, config statsgod.ConfigValues) {
 	// Use a tick channel to determine if a flush message has arrived.
-	tick := time.Tick(*flushInterval)
-	logger.Info.Printf("Flushing every %v", flushInterval)
+	tick := time.Tick(config.Relay.Flush)
+	logger.Info.Printf("Flushing every %v", config.Relay.Flush)
 
 	// Internal storage.
 	metrics := make(map[string]statsgod.Metric)
@@ -273,7 +165,7 @@ func flushMetrics(logger statsgod.Logger) {
 		case metric := <-flushChannel:
 			statsgod.AggregateMetric(metrics, *metric)
 			logger.Trace.Printf("Metric: %v", metrics[metric.Key])
-		case <-time.After(*flushInterval):
+		case <-time.After(config.Relay.Flush):
 			logger.Trace.Println("Metric Channel Timeout")
 			// Nothing to read, attempt to flush.
 		}
