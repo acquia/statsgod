@@ -3,41 +3,33 @@ statsgod
 
 [![Build Status](https://travis-ci.org/acquia/statsgod.svg?branch=master)](https://travis-ci.org/acquia/statsgod)
 
-Statsgod is an experimental Go implementation (or deviation) of Etsy's statsd service.  It does not yet support all statsd configuration options or other capabilities and has not yet been performance tested. All of the metric types are not yet thoroughly tested.
-
-The original statsd was written in node.js. This version is written in Go and utilizes capabilities such as Go channels to improve overall concurrency and scalability.
-
+Statsgod is an experimental Go implementation (or deviation) of Etsy's statsd service.
 
 ## Usage
 ---
 ```
 Usage:  statsgod [args]
- -carbonHost="localhost": Carbon Hostname
- -carbonPort=5001: Carbon Port
- -config="config.yml": YAML config file path
- -debug=false: Debugging mode
- -flushInterval=10s: Flush time
- -host="localhost": Hostname
- -percentile=90: Percentile
- -port=8125: Port
- -relay="carbon": Relay type, one of 'carbon' or 'mock'
- -relayConcurrency=1: Simultaneous Relay Connections
- -relayTimeout=20s: Socket timeout to carbon relay.
+  -config="config.yml": YAML config file path
+  -debug=false: Debugging mode
 ```
 
 ### Example:
 1.  start the daemon.
 	
-		go run statsgod.go
+	go run statsgod.go
 
 2. Start a testing receiver.
 
-		go run test_receiver.go
+	go run test_receiver.go
 
 3. Send data to the daemon. Set a gauge to 3 for the_magic_number
 
-		echo "the_magic_number:3|g" | nc localhost 5000
+	echo "the_magic_number:3|g" | nc localhost 8125 # TCP
+	echo "the_magic_number:3|g" | nc -4u -w0 localhost 8126 # UDP
+	echo "the_magic_number:3|g" | nc -U /tmp/statsgod.sock # Unix Socket
 
+## Configuration
+All runtime options are specified in a YAML file. e.g. ```go run statsgod.go -config=/etc/statsgod.yml```. See config.yml for an example with all default/configurable values.
 
 ## Development
 To download all dependencies and compile statsgod
@@ -49,20 +41,10 @@ To download all dependencies and compile statsgod
 	gom install
 	gom build -o $GOPATH/bin/statsgod
 
+## Testing
+We are using github.com/stretchr/testify to do basic assertions on top of the testing package. The tests are mostly focused on units, but behavior tests are equally welcome. Example:
 
-## TODO
----
-Statsgod is very much a work in progress and has a number of missing features, including, but not limited to:
-
-* Support multiple percentiles
-* Working configuration file
-* Unit tests
-* Operate with UDP or TCP
-* Load test and soak test
-* Pickle support for sending to Graphite in parallel?
-* Performance tuning and tunable channels
-* Have the metric types be pluggable?
-* Pluggable storage backend?
+	make test
 
 ## License
 ---
