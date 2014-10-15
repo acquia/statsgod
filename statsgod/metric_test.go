@@ -134,4 +134,14 @@ func TestParseMetricString(t *testing.T) {
 	assert.Equal(t, metricOne.Key, "test.three")
 	assert.Equal(t, metricOne.LastValue, float32(3))
 	assert.Equal(t, metricOne.MetricType, "gauge")
+
+	// Test that incorrect strings trigger errors.
+	_, errOne := ParseMetricString("test3|g")
+	assert.NotNil(t, errOne)
+	_, errTwo := ParseMetricString("test:3g")
+	assert.NotNil(t, errTwo)
+	_, errThree := ParseMetricString("test:3|gauge")
+	assert.NotNil(t, errThree)
+	_, errFour := ParseMetricString("test:three|g")
+	assert.NotNil(t, errFour)
 }
