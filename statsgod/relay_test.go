@@ -18,8 +18,10 @@ package statsgod
 
 import (
 	"github.com/stretchr/testify/assert"
+	"io/ioutil"
 	"reflect"
 	"testing"
+	"time"
 )
 
 // TestCreateRelay tests CreateRelay().
@@ -41,11 +43,33 @@ func TestCreateRelay(t *testing.T) {
 	assert.Equal(t, reflect.TypeOf(fooRelay).String(), "*statsgod.MockRelay")
 }
 
-// TestCarbonRelayStructure tests the CarbonRelay struct.
+// TestCarbonRelayStructure tests the CarbonRelay implementation.
 func TestCarbonRelayStructure(t *testing.T) {
+	port := StartTemporaryListener(t)
 	backendRelay := CreateRelay("carbon").(*CarbonRelay)
 	assert.NotNil(t, backendRelay.FlushInterval)
 	assert.NotNil(t, backendRelay.Percentile)
 	// At this point the connection pool has not been established.
 	assert.Nil(t, backendRelay.ConnectionPool)
+
+	// Test the Relay() function.
+	logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
+	pool, _ := CreateConnectionPool(1, "127.0.0.1", port, 10*time.Second, logger)
+	backendRelay.ConnectionPool = pool
+	metricOne, _ := ParseMetricString("test.one:3|c")
+	metricTwo, _ := ParseMetricString("test.two:3|ms")
+	metricThree, _ := ParseMetricString("test.three:3|g")
+	backendRelay.Relay(*metricOne, logger)
+	backendRelay.Relay(*metricTwo, logger)
+	backendRelay.Relay(*metricThree, logger)
+
+	StopTemporaryListener()
+}
+
+// TestMockRelayStructure tests the MockRelay implementation.
+func TestMockRelayStructure(t *testing.T) {
+	backendRelay := CreateRelay("mock").(*MockRelay)
+	metricOne, _ := ParseMetricString("test.one:3|c")
+	logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
+	backendRelay.Relay(*metricOne, logger)
 }

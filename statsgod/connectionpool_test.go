@@ -43,8 +43,9 @@ func TestConnectionPoolStructure(t *testing.T) {
 	assert.Equal(t, len(pool.Connections), 0)
 }
 
-// startTemporaryListener starts a dummy tcp listener.
-func startTemporaryListener(t *testing.T) int {
+// StartTemporaryListener starts a dummy tcp listener.
+func StartTemporaryListener(t *testing.T) int {
+	// @todo: move this to a setup/teardown (Issue #29)
 	// Temporarily listen for the test connection
 	conn, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -65,8 +66,8 @@ func startTemporaryListener(t *testing.T) int {
 	return int(port)
 }
 
-// stopTemporaryListener stops the dummy tcp listener.
-func stopTemporaryListener() {
+// StopTemporaryListener stops the dummy tcp listener.
+func StopTemporaryListener() {
 	tmpListener.Close()
 }
 
@@ -74,7 +75,7 @@ func stopTemporaryListener() {
 func TestConnectionPoolFactory(t *testing.T) {
 	maxConnections := 5
 	host := "127.0.0.1"
-	port := startTemporaryListener(t)
+	port := StartTemporaryListener(t)
 	timeout := 1 * time.Second
 	logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
 	pool, _ := CreateConnectionPool(maxConnections, host, int(port), timeout, logger)
@@ -87,14 +88,18 @@ func TestConnectionPoolFactory(t *testing.T) {
 	assert.Equal(t, cap(pool.Connections), maxConnections)
 	assert.Equal(t, len(pool.Connections), maxConnections)
 
-	stopTemporaryListener()
+	StopTemporaryListener()
+
+	// Test that we get an error if there is no listener.
+	_, err := CreateConnectionPool(maxConnections, host, int(port), timeout, logger)
+	assert.NotNil(t, err)
 }
 
 // TestGetReleaseConnection tests GetConnection and ReleaseConnection.
 func TestGetReleaseConnection(t *testing.T) {
 	maxConnections := 2
 	host := "127.0.0.1"
-	port := startTemporaryListener(t)
+	port := StartTemporaryListener(t)
 	timeout := 1 * time.Second
 	logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
 	pool, _ := CreateConnectionPool(maxConnections, host, port, timeout, logger)
@@ -128,4 +133,11 @@ func TestGetReleaseConnection(t *testing.T) {
 	// Test that we cannot create more connections than the pool allows.
 	_, err = pool.CreateConnection(logger)
 	assert.NotNil(t, err)
+
+	StopTemporaryListener()
+
+	// Test that we get an error if there is no listener.
+	connErr, _ := pool.GetConnection(logger)
+	_, releaseErr := pool.ReleaseConnection(connErr, true, logger)
+	assert.NotNil(t, releaseErr)
 }

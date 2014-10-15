@@ -18,6 +18,7 @@ package statsgod
 
 import (
 	"github.com/stretchr/testify/assert"
+	"math"
 	"sort"
 	"testing"
 )
@@ -40,10 +41,11 @@ func TestValueSliceStructure(t *testing.T) {
 
 // TestMinmax tests the Minmax function.
 func TestMinmax(t *testing.T) {
-	values := ValueSlice{1, 2, 3, 4, 5}
-	min, max, _ := values.Minmax()
+	values := ValueSlice{5, math.NaN(), 2, 3, 4, 1}
+	min, max, err := values.Minmax()
 	assert.Equal(t, min, 1)
 	assert.Equal(t, max, 5)
+	assert.NotNil(t, err)
 }
 
 // TestMedian tests the Median function.
@@ -55,6 +57,10 @@ func TestMedian(t *testing.T) {
 	values = append(values, 890)
 	median = values.Median()
 	assert.Equal(t, median, 511.5)
+
+	values = ValueSlice{}
+	median = values.Median()
+	assert.Equal(t, median, 0.0)
 }
 
 // TestMedian tests the Mean function.
@@ -64,7 +70,7 @@ func TestMean(t *testing.T) {
 	assert.Equal(t, mean, 510.25)
 }
 
-// TestMedian tests the Quantile function.
+// TestQuantile tests the Quantile function.
 func TestQuantile(t *testing.T) {
 	values := ValueSlice{123, 234, 345, 456, 567, 678, 789, 890, 910, 1011}
 	q100 := values.Quantile(1)
@@ -79,4 +85,8 @@ func TestQuantile(t *testing.T) {
 	assert.Equal(t, q50, 622.5)
 	q25 := values.Quantile(0.25)
 	assert.Equal(t, q25, 372.75)
+
+	values = ValueSlice{}
+	q0 := values.Quantile(1)
+	assert.Equal(t, q0, 0.0)
 }
