@@ -1,5 +1,5 @@
 gom 'github.com/jmcvetta/randutil'
-gom 'gopkg.in/yaml.v1'
+gom 'gopkg.in/yaml.v2'
 
 group :test do
   gom 'gopkg.in/check.v1'

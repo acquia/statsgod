@@ -1,25 +1,41 @@
 ###
 # Main server configuration
 ###
-name:  "statsgod"
-host:  localhost
-port:  8125
-debug: false
+service:
+    name: statsgod
+    debug: false
+
+###
+# Socket connections
+###
+connection:
+    tcp:
+        host: 127.0.0.1
+        port: 8125
+    udp:
+        host: 127.0.0.1
+        port: 8126
+    unix:
+        file: /var/run/statsgod/statsgod.sock
 
 ###
 # Backend relay carbon server configuration
 ###
-carbonHost: localhost
-carbonPort: 5001
+carbon:
+   host: 127.0.0.1
+   port: 2003
 
 ###
 # Relay connection options
 ###
-relayConcurrency: 1
-relayTimeout: 20s
+relay:
+    type: carbon   # One of "mock" or "carbon".
+    concurrency: 1 # Normally use 1 for carbon.
+    timeout: 30s   # How long to sit idle on a connection.
+    flush: 10s     # How frequently to flush to the relay.
 
 ###
-# Flush options
+# Stats options
 ###
-flushInterval: 10s
-percentile: 80
+stats:
+    percentile: 80
