@@ -1,7 +1,7 @@
 statsgod
 ========
 
-[![Build Status](https://travis-ci.org/acquia/statsgod.svg?branch=master)](https://travis-ci.org/acquia/statsgod)
+[![Build Status](https://magnum.travis-ci.com/acquia/statsgod.svg?token=V11Dcpsz9xGpCipC8pBD&branch=master)](https://magnum.travis-ci.com/acquia/statsgod)
 
 Statsgod is an experimental Go implementation (or deviation) of Etsy's statsd service.
 
