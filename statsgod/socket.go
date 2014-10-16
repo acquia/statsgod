@@ -23,6 +23,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 )
 
 // Enumeration of the socket types.
@@ -35,40 +36,64 @@ const (
 // Socket is the interface for all of our socket types.
 type Socket interface {
 	Listen(parseChannel chan string, logger Logger)
+	Close(logger Logger)
+	GetAddr() string
+	SocketIsActive() bool
 }
 
 // CreateSocket is a factory to create Socket structs.
-func CreateSocket(socketType int) Socket {
+func CreateSocket(socketType int, addr string) Socket {
 	switch socketType {
 	case SocketTypeUdp:
-		return new(SocketUdp)
+		l := new(SocketUdp)
+		l.Addr = addr
+		return l
 	case SocketTypeTcp:
-		return new(SocketTcp)
+		l := new(SocketTcp)
+		l.Addr = addr
+		return l
 	case SocketTypeUnix:
-		return new(SocketUnix)
+		l := new(SocketUnix)
+		l.Addr = addr
+		return l
 	default:
 		panic("Unknown socket type requested.")
 	}
 }
 
-// SocketTcp contains the required fields to start a TCP socket.
-type SocketTcp struct {
-	Host string
-	Port int
+// BlockForSocket blocks until the specified socket is active.
+func BlockForSocket(socket Socket, timeout time.Duration) {
+	start := time.Now()
+	for {
+		if socket.SocketIsActive() == true {
+			return
+		}
+		time.Sleep(time.Microsecond)
+		if time.Since(start) > timeout {
+			return
+		}
+	}
 }
 
-// Listen conforms to the Socket.Listen() interface.
-func (l SocketTcp) Listen(parseChannel chan string, logger Logger) {
-	if l.Host == "" || l.Port == 0 {
-		panic("Could not establish a TCP socket. Host and port must be specified.")
+// SocketTcp contains the required fields to start a TCP socket.
+type SocketTcp struct {
+	Addr     string
+	Listener net.Listener
+}
+
+// Listen listens on a socket and populates a channel with received messages.
+// Conforms to Socket.Listen().
+func (l *SocketTcp) Listen(parseChannel chan string, logger Logger) {
+	if l.Addr == "" {
+		panic("Could not establish a TCP socket. Address must be specified.")
 	}
-	addr := fmt.Sprintf("%s:%d", l.Host, l.Port)
-	listener, err := net.Listen("tcp", addr)
+	listener, err := net.Listen("tcp", l.Addr)
 	if err != nil {
 		panic(fmt.Sprintf("Could not establish a TCP socket. %s", err))
 	}
+	l.Listener = listener
 
-	logger.Info.Printf("TCP socket opened on %s", addr)
+	logger.Info.Printf("TCP socket opened on %s", l.Addr)
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -79,53 +104,107 @@ func (l SocketTcp) Listen(parseChannel chan string, logger Logger) {
 	}
 }
 
-// SocketUdp contains the fields required to start a UDP socket.
-type SocketUdp struct {
-	Host string
-	Port int
+// Close closes an open socket. Conforms to Socket.Close().
+func (l *SocketTcp) Close(logger Logger) {
+	logger.Info.Println("Closing TCP socket.")
+	l.Listener.Close()
 }
 
-// Listen conforms to the Socket.Listen() interface.
-func (l SocketUdp) Listen(parseChannel chan string, logger Logger) {
-	if l.Host == "" || l.Port == 0 {
-		panic("Could not establish a UDP socket. Host and port must be specified.")
+// SocketIsActive determines if the socket is listening. Conforms to Socket.SocketIsActive()
+func (l *SocketTcp) SocketIsActive() bool {
+	return l.Listener != nil
+}
+
+// GetAddr retrieves a net compatible address string. Conforms to Socket.GetAddr().
+func (l *SocketTcp) GetAddr() string {
+	return l.Listener.Addr().String()
+}
+
+// SocketUdp contains the fields required to start a UDP socket.
+type SocketUdp struct {
+	Addr     string
+	Listener *net.UDPConn
+}
+
+// Listen listens on a socket and populates a channel with received messages.
+// Conforms to Socket.Listen().
+func (l *SocketUdp) Listen(parseChannel chan string, logger Logger) {
+	if l.Addr == "" {
+		panic("Could not establish a UDP socket. Addr must be specified.")
 	}
-	addr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:%d", l.Host, l.Port))
+	addr, _ := net.ResolveUDPAddr("udp4", l.Addr)
 	listener, err := net.ListenUDP("udp", addr)
 	if err != nil {
 		panic(fmt.Sprintf("Could not establish a UDP socket. %s", err))
 	}
+	l.Listener = listener
 
-	logger.Info.Printf("UDP socket opened on %s", addr)
+	logger.Info.Printf("UDP socket opened on %s", l.Addr)
 	for {
 		readInputUdp(*listener, parseChannel, logger)
 	}
 }
 
-// SocketUnix contains the fields required to start a Unix socket.
-type SocketUnix struct {
-	Sock string
+// Close closes an open socket. Conforms to Socket.Close().
+func (l *SocketUdp) Close(logger Logger) {
+	logger.Info.Println("Closing UDP socket.")
+	l.Listener.Close()
 }
 
-// Listen conforms to the Socket.Listen() interface.
-func (l SocketUnix) Listen(parseChannel chan string, logger Logger) {
-	if l.Sock == "" {
+// SocketIsActive determines if the socket is listening. Conforms to Socket.SocketIsActive()
+func (l *SocketUdp) SocketIsActive() bool {
+	return l.Listener != nil
+}
+
+// GetAddr retrieves a net compatible address string. Conforms to Socket.GetAddr().
+func (l *SocketUdp) GetAddr() string {
+	return l.Listener.LocalAddr().String()
+}
+
+// SocketUnix contains the fields required to start a Unix socket.
+type SocketUnix struct {
+	Addr     string
+	Listener net.Listener
+}
+
+// Listen listens on a socket and populates a channel with received messages.
+// Conforms to Socket.Listen().
+func (l *SocketUnix) Listen(parseChannel chan string, logger Logger) {
+	if l.Addr == "" {
 		panic("Could not establish a Unix socket. No sock file specified.")
 	}
-	listener, err := net.Listen("unix", l.Sock)
-	defer os.Remove(l.Sock)
+	listener, err := net.Listen("unix", l.Addr)
 	if err != nil {
 		panic(fmt.Sprintf("Could not establish a Unix socket. %s", err))
 	}
-	logger.Info.Printf("Unix socket opened at %s", l.Sock)
+	defer os.Remove(l.Addr)
+	l.Listener = listener
+	logger.Info.Printf("Unix socket opened at %s", l.Addr)
 	for {
-		conn, err := listener.Accept()
+		conn, err := l.Listener.Accept()
 		if err != nil {
 			logger.Error.Println("Could not accept connection", err)
 			return
 		}
 		go readInput(conn, parseChannel, logger)
 	}
+}
+
+// Close closes an open socket. Conforms to Socket.Close().
+func (l *SocketUnix) Close(logger Logger) {
+	defer os.Remove(l.Addr)
+	logger.Info.Println("Closing Unix socket.")
+	l.Listener.Close()
+}
+
+// SocketIsActive determines if the socket is listening. Conforms to Socket.SocketIsActive()
+func (l *SocketUnix) SocketIsActive() bool {
+	return l.Listener != nil
+}
+
+// GetAddr retrieves a net compatible address string. Conforms to Socket.GetAddr().
+func (l *SocketUnix) GetAddr() string {
+	return l.Addr
 }
 
 // readInput parses the buffer for TCP and Unix sockets.
