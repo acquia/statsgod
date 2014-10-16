@@ -29,10 +29,24 @@ carbon:
 # Relay connection options
 ###
 relay:
-    type: carbon   # One of "mock" or "carbon".
-    concurrency: 1 # Normally use 1 for carbon.
-    timeout: 30s   # How long to sit idle on a connection.
-    flush: 10s     # How frequently to flush to the relay.
+    # type specifies the backend relay is one of "mock" or "carbon".
+    type: carbon
+    # concurrency specifies how many concurrent connections to use when
+    # relaying data. Normally this is 1 to consolidate metric aggregation.
+    concurrency: 1
+    # timeout specifies how long to keep the relay connections open.
+    timeout: 30s
+
+###
+# In-memory metric persistence options
+###
+flush:
+    # interval specifies how frequently to flush to the relay.
+    interval: 10s
+    # persistduration specifies how long to persist metrics in memory when no new
+    # values of the same key have been received. This can help to create
+    # contiguous data in the relay, but should be considered a memory leak.
+    persistduration: 10s
 
 ###
 # Stats options

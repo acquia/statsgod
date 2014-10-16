@@ -52,7 +52,10 @@ type ConfigValues struct {
 		Type        string
 		Concurrency int
 		Timeout     time.Duration
-		Flush       time.Duration
+	}
+	Flush struct {
+		Interval        time.Duration
+		PersistDuration time.Duration
 	}
 	Carbon struct {
 		Host string
@@ -76,7 +79,8 @@ func LoadConfig(filePath string) (config ConfigValues, err error) {
 	config.Relay.Type = "carbon"
 	config.Relay.Concurrency = 1
 	config.Relay.Timeout = 30 * time.Second
-	config.Relay.Flush = 10 * time.Second
+	config.Flush.Interval = 10 * time.Second
+	config.Flush.PersistDuration = 10 * time.Second
 	config.Carbon.Host = "127.0.0.1"
 	config.Carbon.Port = 2003
 	config.Stats.Percentile = 80
