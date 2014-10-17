@@ -41,7 +41,7 @@ func TestMetricStructure(t *testing.T) {
 	assert.NotNil(t, metric.TotalHits)
 	assert.NotNil(t, metric.LastValue)
 	assert.NotNil(t, metric.FlushTime)
-	assert.NotNil(t, metric.LastFlushed)
+	assert.NotNil(t, metric.LastAdded)
 
 	// Slices when empty evaluate to nil, check for len instead.
 	assert.Equal(t, len(metric.AllValues), 0)

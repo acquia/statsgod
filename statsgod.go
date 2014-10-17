@@ -86,7 +86,7 @@ func main() {
 	case "carbon":
 		// Create a relay to carbon.
 		relay := statsgod.CreateRelay("carbon").(*statsgod.CarbonRelay)
-		relay.FlushInterval = config.Relay.Flush
+		relay.FlushInterval = config.Flush.Interval
 		relay.Percentile = config.Stats.Percentile
 		// Create a connection pool for the relay to use.
 		pool, err := statsgod.CreateConnectionPool(config.Relay.Concurrency, config.Carbon.Host, config.Carbon.Port, config.Relay.Timeout, logger)
@@ -151,11 +151,14 @@ func parseMetrics(logger statsgod.Logger) {
 // the specified flush interval passes, we send aggregated metrics to storage.
 func flushMetrics(logger statsgod.Logger, config statsgod.ConfigValues) {
 	// Use a tick channel to determine if a flush message has arrived.
-	tick := time.Tick(config.Relay.Flush)
-	logger.Info.Printf("Flushing every %v", config.Relay.Flush)
+	tick := time.Tick(config.Flush.Interval)
+	logger.Info.Printf("Flushing every %v", config.Flush.Interval)
 
 	// Internal storage.
 	metrics := make(map[string]statsgod.Metric)
+
+	// The number of seconds to persist a metric without receiving a value.
+	persistDuration := int(config.Flush.PersistDuration / time.Second)
 
 	for {
 		// Process the metrics as soon as they arrive on the channel. If nothing has
@@ -165,7 +168,7 @@ func flushMetrics(logger statsgod.Logger, config statsgod.ConfigValues) {
 		case metric := <-flushChannel:
 			statsgod.AggregateMetric(metrics, *metric)
 			logger.Trace.Printf("Metric: %v", metrics[metric.Key])
-		case <-time.After(config.Relay.Flush):
+		case <-time.After(config.Flush.Interval):
 			logger.Trace.Println("Metric Channel Timeout")
 			// Nothing to read, attempt to flush.
 		}
@@ -175,12 +178,19 @@ func flushMetrics(logger statsgod.Logger, config statsgod.ConfigValues) {
 		select {
 		case <-tick:
 			logger.Trace.Println("Tick...")
+			flushTime := int(time.Now().Unix())
 			for key, metric := range metrics {
-				metric.FlushTime = int(time.Now().Unix())
-				backendRelay.Relay(metric, logger)
-				// @todo: should we delete gauges?
-				delete(metrics, key)
+				// Purge stale metrics if they are old.
+				if metric.FlushTime != 0 &&
+					metric.LastAdded+persistDuration <= flushTime {
+					delete(metrics, key)
+				} else {
+					metric.FlushTime = flushTime
+					backendRelay.Relay(metric, logger)
+					metrics[metric.Key] = metric
+				}
 			}
+
 		default:
 			// Flush interval hasn't passed yet.
 		}

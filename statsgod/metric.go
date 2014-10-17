@@ -51,7 +51,7 @@ type Metric struct {
 	SumInThreshold  float64    // The total within the threshold
 	AllValues       ValueSlice // All of the values.
 	FlushTime       int        // What time are we sending Graphite?
-	LastFlushed     int        // When did we last flush this out?
+	LastAdded       int        // When did we last add a value?
 }
 
 // ParseMetricString parses a metric string, and if it is properly constructed,
@@ -118,8 +118,10 @@ func AggregateMetric(metrics map[string]Metric, metric Metric) {
 			existingMetric.LastValue = metric.LastValue
 		}
 
+		existingMetric.LastAdded = int(time.Now().Unix())
 		metrics[metric.Key] = existingMetric
 	} else {
+		metric.LastAdded = int(time.Now().Unix())
 		metrics[metric.Key] = metric
 	}
 }
