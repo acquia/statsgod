@@ -34,9 +34,12 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"github.com/acquia/statsgod/statsgod"
 	"io/ioutil"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -108,19 +111,34 @@ func main() {
 		go flushMetrics(logger, config)
 	}
 
-	socketTcp := statsgod.CreateSocket(statsgod.SocketTypeTcp).(*statsgod.SocketTcp)
-	socketTcp.Host = config.Connection.Tcp.Host
-	socketTcp.Port = config.Connection.Tcp.Port
+	tcpAddr := fmt.Sprintf("%s:%d", config.Connection.Tcp.Host, config.Connection.Tcp.Port)
+	socketTcp := statsgod.CreateSocket(statsgod.SocketTypeTcp, tcpAddr).(*statsgod.SocketTcp)
 	go socketTcp.Listen(parseChannel, logger)
 
-	socketUdp := statsgod.CreateSocket(statsgod.SocketTypeUdp).(*statsgod.SocketUdp)
-	socketUdp.Host = config.Connection.Udp.Host
-	socketUdp.Port = config.Connection.Udp.Port
+	udpAddr := fmt.Sprintf("%s:%d", config.Connection.Udp.Host, config.Connection.Udp.Port)
+	socketUdp := statsgod.CreateSocket(statsgod.SocketTypeUdp, udpAddr).(*statsgod.SocketUdp)
 	go socketUdp.Listen(parseChannel, logger)
 
-	socketUnix := statsgod.CreateSocket(statsgod.SocketTypeUnix).(*statsgod.SocketUnix)
-	socketUnix.Sock = config.Connection.Unix.File
+	socketUnix := statsgod.CreateSocket(statsgod.SocketTypeUnix, config.Connection.Unix.File).(*statsgod.SocketUnix)
 	go socketUnix.Listen(parseChannel, logger)
+
+	// Signal handling. Any signal that should cause this program to stop needs to
+	// also do some cleanup before exiting.
+	signalChannel := make(chan os.Signal, 1)
+	signal.Notify(signalChannel,
+		syscall.SIGABRT,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
+	go func() {
+		s := <-signalChannel
+		logger.Info.Printf("Processed signal %v", s)
+		socketTcp.Close(logger)
+		socketUdp.Close(logger)
+		socketUnix.Close(logger)
+		os.Exit(1)
+	}()
 
 	select {}
 }
