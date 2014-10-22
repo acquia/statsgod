@@ -18,9 +18,23 @@ package statsgod
 
 import (
 	"github.com/stretchr/testify/assert"
-	"reflect"
+	"io/ioutil"
+	"net"
 	"testing"
+	"time"
 )
+
+// Table for running the socket tests.
+var testSockets = []struct {
+	socketType    int
+	socketDesc    string
+	socketAddr    string
+	socketMessage string
+}{
+	{SocketTypeTcp, "tcp", "127.0.0.1:0", "test.tcp:4|c"},
+	{SocketTypeUdp, "udp", "127.0.0.1:0", "test.udp:4|c"},
+	{SocketTypeUnix, "unix", "/tmp/statsgod.sock", "test.unix:4|c"},
+}
 
 // ensureSocketInterface Tests that each Socket conforms to the interface.
 func ensureSocketInterface(socketInterface Socket, t *testing.T) {
@@ -36,29 +50,43 @@ func ensureSocketInterface(socketInterface Socket, t *testing.T) {
 	}
 }
 
+// TestCreateSocket will create each socket type and ensure that it conforms to
+// the Socket interface.
 func TestCreateSocket(t *testing.T) {
-	// Test the UDP socket and required fields.
-	socketUdpInterface := CreateSocket(SocketTypeUdp)
-	ensureSocketInterface(socketUdpInterface, t)
-	socketUdp := socketUdpInterface.(*SocketUdp)
-	assert.Equal(t, reflect.TypeOf(socketUdp).String(), "*statsgod.SocketUdp")
-	assert.NotNil(t, socketUdp.Host)
-	assert.NotNil(t, socketUdp.Port)
+	for _, ts := range testSockets {
+		socket := CreateSocket(ts.socketType, ts.socketAddr)
+		ensureSocketInterface(socket, t)
+	}
+}
 
-	// Test the TCP socket and required fields.
-	socketTcpInterface := CreateSocket(SocketTypeTcp)
-	ensureSocketInterface(socketTcpInterface, t)
-	socketTcp := socketTcpInterface.(*SocketTcp)
-	assert.NotNil(t, socketTcp)
-	assert.Equal(t, reflect.TypeOf(socketTcp).String(), "*statsgod.SocketTcp")
-	assert.NotNil(t, socketTcp.Host)
-	assert.NotNil(t, socketTcp.Port)
+// TestListenClose is a functional test that we can listen, receive and close on our sockets.
+func TestListenClose(t *testing.T) {
+	parseChannel := make(chan string)
+	logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
 
-	// Test the Unix socket and required fields.
-	socketUnixInterface := CreateSocket(SocketTypeUnix)
-	ensureSocketInterface(socketUnixInterface, t)
-	socketUnix := socketUnixInterface.(*SocketUnix)
-	assert.NotNil(t, socketUnix)
-	assert.Equal(t, reflect.TypeOf(socketUnix).String(), "*statsgod.SocketUnix")
-	assert.NotNil(t, socketUnix.Sock)
+	for _, ts := range testSockets {
+		socket := CreateSocket(ts.socketType, ts.socketAddr)
+		assert.NotNil(t, socket)
+		go socket.Listen(parseChannel, logger)
+		BlockForSocket(socket, time.Second)
+		sendSocketMessage(ts.socketDesc, socket, ts.socketMessage, t)
+		message := ""
+		select {
+		case message = <-parseChannel:
+		case <-time.After(10 * time.Second):
+			message = ""
+		}
+		assert.Equal(t, message, ts.socketMessage)
+		socket.Close(logger)
+	}
+}
+
+// sendSocketMessage will connect to a specified socket type send a message and close.
+func sendSocketMessage(socketType string, socket Socket, message string, t *testing.T) {
+	conn, err := net.Dial(socketType, socket.GetAddr())
+	if err != nil {
+		t.Fatalf("Dial failed: %v", err)
+	}
+	defer conn.Close()
+	_, err = conn.Write([]byte(message))
 }
