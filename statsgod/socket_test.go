@@ -14,78 +14,95 @@
  * limitations under the License.
  */
 
-package statsgod
+package statsgod_test
 
 import (
-	"github.com/stretchr/testify/assert"
+	"fmt"
+	. "github.com/acquia/statsgod/statsgod"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	"io/ioutil"
 	"net"
-	"testing"
 	"time"
 )
 
-// Table for running the socket tests.
-var testSockets = []struct {
-	socketType    int
-	socketDesc    string
-	socketAddr    string
-	socketMessage string
-}{
-	{SocketTypeTcp, "tcp", "127.0.0.1:0", "test.tcp:4|c"},
-	{SocketTypeUdp, "udp", "127.0.0.1:0", "test.udp:4|c"},
-	{SocketTypeUnix, "unix", "/tmp/statsgod.sock", "test.unix:4|c"},
-}
-
-// ensureSocketInterface Tests that each Socket conforms to the interface.
-func ensureSocketInterface(socketInterface Socket, t *testing.T) {
-	// This tests that it conforms to the Socket interface.
-	if s, ok := socketInterface.(interface {
-		Listen(parseChannel chan string, logger Logger)
-	}); ok {
-		// If it contains the Listen function, we are good.
-		assert.NotNil(t, s)
-	} else {
-		// Else we need to implement Listen().
-		assert.NotNil(t, nil)
+var _ = Describe("Sockets", func() {
+	// Table for running the socket tests.
+	var testSockets = []struct {
+		socketType    int
+		socketDesc    string
+		socketAddr    string
+		badAddr       string
+		socketMessage string
+	}{
+		{SocketTypeTcp, "tcp", "127.0.0.1:0", "0.0.0.0", "test.tcp:4|c"},
+		{SocketTypeUdp, "udp", "127.0.0.1:0", "", "test.udp:4|c"},
+		{SocketTypeUnix, "unix", "/tmp/statsgod.sock", "/dev/null", "test.unix:4|c"},
 	}
-}
 
-// TestCreateSocket will create each socket type and ensure that it conforms to
-// the Socket interface.
-func TestCreateSocket(t *testing.T) {
-	for _, ts := range testSockets {
-		socket := CreateSocket(ts.socketType, ts.socketAddr)
-		ensureSocketInterface(socket, t)
-	}
-}
+	Describe("Testing the Socket interface", func() {
+		It("should contain the required functions", func() {
+			for _, ts := range testSockets {
+				socket := CreateSocket(ts.socketType, ts.socketAddr)
+				_, ok := socket.(interface {
+					Listen(parseChannel chan string, logger Logger)
+					Close(logger Logger)
+					GetAddr() string
+					SocketIsActive() bool
+				})
+				Expect(ok).Should(Equal(true))
+			}
 
-// TestListenClose is a functional test that we can listen, receive and close on our sockets.
-func TestListenClose(t *testing.T) {
-	parseChannel := make(chan string)
-	logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
+		})
 
-	for _, ts := range testSockets {
-		socket := CreateSocket(ts.socketType, ts.socketAddr)
-		assert.NotNil(t, socket)
-		go socket.Listen(parseChannel, logger)
-		BlockForSocket(socket, time.Second)
-		sendSocketMessage(ts.socketDesc, socket, ts.socketMessage, t)
-		message := ""
-		select {
-		case message = <-parseChannel:
-		case <-time.After(10 * time.Second):
-			message = ""
-		}
-		assert.Equal(t, message, ts.socketMessage)
-		socket.Close(logger)
-	}
-}
+		It("should panic for unknown socket types", func() {
+			defer GinkgoRecover()
+			Expect(func() { CreateSocket(99, "null") }).Should(Panic())
+		})
+	})
+
+	Describe("Testing the Socket functionality", func() {
+		parseChannel := make(chan string)
+		logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
+		It("should be able to recieve messages", func() {
+			for _, ts := range testSockets {
+				socket := CreateSocket(ts.socketType, ts.socketAddr)
+				go socket.Listen(parseChannel, logger)
+				BlockForSocket(socket, time.Second)
+				sendSocketMessage(ts.socketDesc, socket, ts.socketMessage)
+				message := ""
+				select {
+				case message = <-parseChannel:
+				case <-time.After(10 * time.Second):
+					message = ""
+				}
+				Expect(message).Should(Equal(ts.socketMessage))
+				socket.Close(logger)
+			}
+		})
+
+		It("should be able to block until timeout", func() {
+			socket := CreateSocket(SocketTypeTcp, "127.0.0.1:0")
+			BlockForSocket(socket, time.Microsecond)
+		})
+
+		It("should panic if it has a bad address", func() {
+			for _, ts := range testSockets {
+				socket := CreateSocket(ts.socketType, "")
+				Expect(func() { socket.Listen(parseChannel, logger) }).Should(Panic())
+				socket = CreateSocket(ts.socketType, ts.badAddr)
+				Expect(func() { socket.Listen(parseChannel, logger) }).Should(Panic())
+			}
+		})
+
+	})
+})
 
 // sendSocketMessage will connect to a specified socket type send a message and close.
-func sendSocketMessage(socketType string, socket Socket, message string, t *testing.T) {
+func sendSocketMessage(socketType string, socket Socket, message string) {
 	conn, err := net.Dial(socketType, socket.GetAddr())
 	if err != nil {
-		t.Fatalf("Dial failed: %v", err)
+		panic(fmt.Sprintf("Dial failed: %v", err))
 	}
 	defer conn.Close()
 	_, err = conn.Write([]byte(message))
