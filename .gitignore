@@ -24,3 +24,4 @@ _vendor/*
 *.test
 
 coverage.out
+statsgod.coverprofile
