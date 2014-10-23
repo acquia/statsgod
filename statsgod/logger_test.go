@@ -14,20 +14,25 @@
  * limitations under the License.
  */
 
-package statsgod
+package statsgod_test
 
 import (
-	"github.com/stretchr/testify/assert"
+	. "github.com/acquia/statsgod/statsgod"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	"io/ioutil"
-	"testing"
 )
 
-// TestLoggerStructure tests the Logging struct.
-func TestLoggerStructure(t *testing.T) {
-	logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
+var _ = Describe("Logger", func() {
 
-	assert.NotNil(t, logger.Trace)
-	assert.NotNil(t, logger.Info)
-	assert.NotNil(t, logger.Warning)
-	assert.NotNil(t, logger.Error)
-}
+	Describe("Creating a silent logger", func() {
+		It("should be a legit Logger struct", func() {
+			logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
+			Expect(logger.Trace).ShouldNot(Equal(nil))
+			Expect(logger.Info).ShouldNot(Equal(nil))
+			Expect(logger.Warning).ShouldNot(Equal(nil))
+			Expect(logger.Error).ShouldNot(Equal(nil))
+		})
+	})
+
+})

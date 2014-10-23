@@ -14,62 +14,80 @@
  * limitations under the License.
  */
 
-package statsgod
+package statsgod_test
 
 import (
-	"github.com/stretchr/testify/assert"
+	. "github.com/acquia/statsgod/statsgod"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	"io/ioutil"
 	"reflect"
-	"testing"
 	"time"
 )
 
-// TestCreateRelay tests CreateRelay().
-func TestCreateRelay(t *testing.T) {
+var _ = Describe("Relay", func() {
+	var (
+		tmpPort int
+		logger  Logger
+	)
 
-	// Tests that we can get a mock relay.
-	mockRelay := CreateRelay("mock")
-	assert.NotNil(t, mockRelay)
-	assert.Equal(t, reflect.TypeOf(mockRelay).String(), "*statsgod.MockRelay")
+	Describe("Testing the basic structure", func() {
+		BeforeEach(func() {
+			logger = *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
+			tmpPort = StartTemporaryListener()
+		})
 
-	// Tests that we can get a carbon relay.
-	carbonRelay := CreateRelay("carbon")
-	assert.NotNil(t, carbonRelay)
-	assert.Equal(t, reflect.TypeOf(carbonRelay).String(), "*statsgod.CarbonRelay")
+		AfterEach(func() {
+			StopTemporaryListener()
+		})
 
-	// Tests that we can get a mock relay as the default value
-	fooRelay := CreateRelay("foo")
-	assert.NotNil(t, fooRelay)
-	assert.Equal(t, reflect.TypeOf(fooRelay).String(), "*statsgod.MockRelay")
-}
+		Context("when using the factory function", func() {
+			It("should be a complete structure", func() {
+				// Tests that we can get a mock relay.
+				mockRelay := CreateRelay("mock")
+				Expect(mockRelay).ShouldNot(Equal(nil))
+				Expect(reflect.TypeOf(mockRelay).String()).Should(Equal("*statsgod.MockRelay"))
 
-// TestCarbonRelayStructure tests the CarbonRelay implementation.
-func TestCarbonRelayStructure(t *testing.T) {
-	port := StartTemporaryListener(t)
-	backendRelay := CreateRelay("carbon").(*CarbonRelay)
-	assert.NotNil(t, backendRelay.FlushInterval)
-	assert.NotNil(t, backendRelay.Percentile)
-	// At this point the connection pool has not been established.
-	assert.Nil(t, backendRelay.ConnectionPool)
+				// Tests that we can get a carbon relay.
+				carbonRelay := CreateRelay("carbon")
+				Expect(carbonRelay).ShouldNot(Equal(nil))
+				Expect(reflect.TypeOf(carbonRelay).String()).Should(Equal("*statsgod.CarbonRelay"))
 
-	// Test the Relay() function.
-	logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
-	pool, _ := CreateConnectionPool(1, "127.0.0.1", port, 10*time.Second, logger)
-	backendRelay.ConnectionPool = pool
-	metricOne, _ := ParseMetricString("test.one:3|c")
-	metricTwo, _ := ParseMetricString("test.two:3|ms")
-	metricThree, _ := ParseMetricString("test.three:3|g")
-	backendRelay.Relay(*metricOne, logger)
-	backendRelay.Relay(*metricTwo, logger)
-	backendRelay.Relay(*metricThree, logger)
+				// Tests that we can get a mock relay as the default value
+				fooRelay := CreateRelay("foo")
+				Expect(fooRelay).ShouldNot(Equal(nil))
+				Expect(reflect.TypeOf(fooRelay).String()).Should(Equal("*statsgod.MockRelay"))
+			})
+		})
 
-	StopTemporaryListener()
-}
+		Context("when creating a CarbonRelay", func() {
+			It("should be a complete structure", func() {
+				backendRelay := CreateRelay("carbon").(*CarbonRelay)
+				Expect(backendRelay.FlushInterval).ShouldNot(Equal(nil))
+				Expect(backendRelay.Percentile).ShouldNot(Equal(nil))
+				// At this point the connection pool has not been established.
+				Expect(backendRelay.ConnectionPool).ShouldNot(Equal(nil))
 
-// TestMockRelayStructure tests the MockRelay implementation.
-func TestMockRelayStructure(t *testing.T) {
-	backendRelay := CreateRelay("mock").(*MockRelay)
-	metricOne, _ := ParseMetricString("test.one:3|c")
-	logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
-	backendRelay.Relay(*metricOne, logger)
-}
+				// Test the Relay() function.
+				logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
+				pool, _ := CreateConnectionPool(1, "127.0.0.1", tmpPort, 10*time.Second, logger)
+				backendRelay.ConnectionPool = pool
+				metricOne, _ := ParseMetricString("test.one:3|c")
+				metricTwo, _ := ParseMetricString("test.two:3|ms")
+				metricThree, _ := ParseMetricString("test.three:3|g")
+				backendRelay.Relay(*metricOne, logger)
+				backendRelay.Relay(*metricTwo, logger)
+				backendRelay.Relay(*metricThree, logger)
+			})
+		})
+
+		Context("when creating a MockRelay", func() {
+			It("should be a complete structure", func() {
+				backendRelay := CreateRelay("mock").(*MockRelay)
+				metricOne, _ := ParseMetricString("test.one:3|c")
+				logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
+				backendRelay.Relay(*metricOne, logger)
+			})
+		})
+	})
+})

@@ -6,5 +6,6 @@ group :test do
   gom 'github.com/golang/lint/golint'
   gom 'code.google.com/p/go.tools/cmd/vet'
   gom 'code.google.com/p/go.tools/cmd/cover'
-  gom 'github.com/stretchr/testify'
+  gom 'github.com/onsi/ginkgo/ginkgo'
+  gom 'github.com/onsi/gomega'
 end

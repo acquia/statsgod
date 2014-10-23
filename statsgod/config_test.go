@@ -14,35 +14,70 @@
  * limitations under the License.
  */
 
-package statsgod
+package statsgod_test
 
 import (
-	"github.com/stretchr/testify/assert"
-	"testing"
+	. "github.com/acquia/statsgod/statsgod"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
-// Tests all of the known configuration values and types.
-func TestLoadConfig(t *testing.T) {
-	// Ensure we can get default values by loading without a file. Then
-	// ensure that the default config file matches those values.
-	config, _ := LoadConfig("")
-	yaml, _ := LoadConfig("../config.yml")
-	assert.Equal(t, config.Service.Name, yaml.Service.Name)
-	assert.Equal(t, config.Service.Debug, yaml.Service.Debug)
-	assert.Equal(t, config.Connection.Tcp.Host, yaml.Connection.Tcp.Host)
-	assert.Equal(t, config.Connection.Tcp.Port, yaml.Connection.Tcp.Port)
-	assert.Equal(t, config.Connection.Udp.Host, yaml.Connection.Udp.Host)
-	assert.Equal(t, config.Connection.Udp.Port, yaml.Connection.Udp.Port)
-	assert.Equal(t, config.Connection.Unix.File, yaml.Connection.Unix.File)
-	assert.Equal(t, config.Relay.Type, yaml.Relay.Type)
-	assert.Equal(t, config.Relay.Concurrency, yaml.Relay.Concurrency)
-	assert.Equal(t, config.Relay.Timeout, yaml.Relay.Timeout)
-	assert.Equal(t, config.Relay.Flush, yaml.Relay.Flush)
-	assert.Equal(t, config.Carbon.Host, yaml.Carbon.Host)
-	assert.Equal(t, config.Carbon.Port, yaml.Carbon.Port)
-	assert.Equal(t, config.Stats.Percentile, yaml.Stats.Percentile)
+var _ = Describe("Config", func() {
 
-	// Test that a non-existent file throws an error
-	_, noFileErr := LoadConfig("noFile")
-	assert.NotNil(t, noFileErr)
-}
+	var (
+		config ConfigValues
+		yaml   ConfigValues
+	)
+
+	Describe("Loading runtime configuration", func() {
+		Context("Loading default values", func() {
+			config, _ = LoadConfig("")
+			It("should contain defaults", func() {
+				Expect(config.Service.Name).ShouldNot(Equal(nil))
+				Expect(config.Service.Debug).ShouldNot(Equal(nil))
+				Expect(config.Connection.Tcp.Host).ShouldNot(Equal(nil))
+				Expect(config.Connection.Tcp.Port).ShouldNot(Equal(nil))
+				Expect(config.Connection.Udp.Host).ShouldNot(Equal(nil))
+				Expect(config.Connection.Udp.Port).ShouldNot(Equal(nil))
+				Expect(config.Connection.Unix.File).ShouldNot(Equal(nil))
+				Expect(config.Relay.Type).ShouldNot(Equal(nil))
+				Expect(config.Relay.Concurrency).ShouldNot(Equal(nil))
+				Expect(config.Relay.Timeout).ShouldNot(Equal(nil))
+				Expect(config.Relay.Flush).ShouldNot(Equal(nil))
+				Expect(config.Carbon.Host).ShouldNot(Equal(nil))
+				Expect(config.Carbon.Port).ShouldNot(Equal(nil))
+				Expect(config.Stats.Percentile).ShouldNot(Equal(nil))
+
+			})
+		})
+
+		Context("Loading config file", func() {
+			yaml, _ = LoadConfig("../config.yml")
+			It("should match the defaults", func() {
+				Expect(yaml.Service.Name).Should(Equal(config.Service.Name))
+				Expect(yaml.Service.Debug).Should(Equal(config.Service.Debug))
+				Expect(yaml.Connection.Tcp.Host).Should(Equal(config.Connection.Tcp.Host))
+				Expect(yaml.Connection.Tcp.Port).Should(Equal(config.Connection.Tcp.Port))
+				Expect(yaml.Connection.Udp.Host).Should(Equal(config.Connection.Udp.Host))
+				Expect(yaml.Connection.Udp.Port).Should(Equal(config.Connection.Udp.Port))
+				Expect(yaml.Connection.Unix.File).Should(Equal(config.Connection.Unix.File))
+				Expect(yaml.Relay.Type).Should(Equal(config.Relay.Type))
+				Expect(yaml.Relay.Concurrency).Should(Equal(config.Relay.Concurrency))
+				Expect(yaml.Relay.Timeout).Should(Equal(config.Relay.Timeout))
+				Expect(yaml.Relay.Flush).Should(Equal(config.Relay.Flush))
+				Expect(yaml.Carbon.Host).Should(Equal(config.Carbon.Host))
+				Expect(yaml.Carbon.Port).Should(Equal(config.Carbon.Port))
+				Expect(yaml.Stats.Percentile).Should(Equal(config.Stats.Percentile))
+
+			})
+		})
+
+		Context("Loading bogus file", func() {
+			It("should throw an error", func() {
+				_, noFileErr := LoadConfig("noFile")
+				Expect(noFileErr).ShouldNot(Equal(nil))
+			})
+		})
+	})
+
+})

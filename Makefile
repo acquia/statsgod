@@ -30,7 +30,7 @@ test: deps
 	$(GOM) exec golint .
 	$(foreach p, $(PACKAGES), $(GOM) exec golint ./$(p)/.; )
 	$(GOM) exec go test -covermode=count -coverprofile=coverage.out .
-	$(GOM) exec go test -covermode=count -coverprofile=coverage.out ./statsgod/.
+	$(GOM) exec ginkgo -cover=true ./statsgod/.
 
 recv:
 	go run -race receiver/test_receiver.go
