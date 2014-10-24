@@ -34,7 +34,6 @@ var _ = Describe("Config", func() {
 			config, _ = LoadConfig("")
 			It("should contain defaults", func() {
 				Expect(config.Service.Name).ShouldNot(Equal(nil))
-				Expect(config.Service.Debug).ShouldNot(Equal(nil))
 				Expect(config.Connection.Tcp.Host).ShouldNot(Equal(nil))
 				Expect(config.Connection.Tcp.Port).ShouldNot(Equal(nil))
 				Expect(config.Connection.Udp.Host).ShouldNot(Equal(nil))
@@ -47,7 +46,9 @@ var _ = Describe("Config", func() {
 				Expect(config.Carbon.Host).ShouldNot(Equal(nil))
 				Expect(config.Carbon.Port).ShouldNot(Equal(nil))
 				Expect(config.Stats.Percentile).ShouldNot(Equal(nil))
-
+				Expect(config.Debug.Verbose).ShouldNot(Equal(nil))
+				Expect(config.Debug.Receipt).ShouldNot(Equal(nil))
+				Expect(config.Debug.Profile).ShouldNot(Equal(nil))
 			})
 		})
 
@@ -55,7 +56,6 @@ var _ = Describe("Config", func() {
 			yaml, _ = LoadConfig("../config.yml")
 			It("should match the defaults", func() {
 				Expect(yaml.Service.Name).Should(Equal(config.Service.Name))
-				Expect(yaml.Service.Debug).Should(Equal(config.Service.Debug))
 				Expect(yaml.Connection.Tcp.Host).Should(Equal(config.Connection.Tcp.Host))
 				Expect(yaml.Connection.Tcp.Port).Should(Equal(config.Connection.Tcp.Port))
 				Expect(yaml.Connection.Udp.Host).Should(Equal(config.Connection.Udp.Host))
@@ -68,6 +68,9 @@ var _ = Describe("Config", func() {
 				Expect(yaml.Carbon.Host).Should(Equal(config.Carbon.Host))
 				Expect(yaml.Carbon.Port).Should(Equal(config.Carbon.Port))
 				Expect(yaml.Stats.Percentile).Should(Equal(config.Stats.Percentile))
+				Expect(yaml.Debug.Verbose).Should(Equal(config.Debug.Verbose))
+				Expect(yaml.Debug.Receipt).Should(Equal(config.Debug.Receipt))
+				Expect(yaml.Debug.Profile).Should(Equal(config.Debug.Profile))
 
 			})
 		})

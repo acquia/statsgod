@@ -20,6 +20,7 @@ package statsgod
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strings"
@@ -177,7 +178,6 @@ func (l *SocketUnix) Listen(parseChannel chan string, logger Logger) {
 	if err != nil {
 		panic(fmt.Sprintf("Could not establish a Unix socket. %s", err))
 	}
-	defer os.Remove(l.Addr)
 	l.Listener = listener
 	logger.Info.Printf("Unix socket opened at %s", l.Addr)
 	for {
@@ -210,25 +210,69 @@ func (l *SocketUnix) GetAddr() string {
 // readInput parses the buffer for TCP and Unix sockets.
 func readInput(conn net.Conn, parseChannel chan string, logger Logger) {
 	defer conn.Close()
-	// Read the data from the connection.
-	buf := make([]byte, 512)
-	_, err := conn.Read(buf)
-	if err != nil {
-		logger.Error.Println("Could not read stream.", err)
-		return
-	}
-	if len(string(buf)) != 0 {
-		parseChannel <- strings.TrimSpace(strings.Trim(string(buf), "\x00"))
+	// readLength is the length of our buffer.
+	readLength := 512
+	// metricCount is how many metrics to parse per read.
+	metricCount := 0
+	// overflow tracks any messages that span two buffers.
+	overflow := ""
+	// buf is a reusable buffer for reading from the connection.
+	buf := make([]byte, readLength)
+
+	// Read data from the connection until it is closed.
+	for {
+		length, err := conn.Read(buf)
+		if err != nil {
+			// EOF will present as an error, but it could just signal a hangup.
+			if err != io.EOF {
+				logger.Error.Println("Could not read stream.", err)
+			}
+			break
+		}
+		conn.Write([]byte(""))
+		if length == 0 {
+			logger.Info.Println("Connection closed by peer.")
+			break
+		} else {
+			// Check for multiple metrics delimited by a newline character.
+			metrics := strings.Split(overflow+strings.TrimSpace(strings.Trim(string(buf), "\x00")), "\n")
+			// If the buffer is full, the last metric likely has not fully been sent
+			// yet. Try to parse it and if it throws an error, we'll prepend it to the
+			// next connection read presuming that it will span to the next data read.
+			metricCount = len(metrics)
+			overflow = ""
+			if length == readLength {
+				// Attempt to parse the last metric. If that fails parse, we'll
+				// reduce the size by one and save the overflow for the next read.
+				_, err = ParseMetricString(metrics[len(metrics)-1])
+				if err != nil {
+					overflow = metrics[len(metrics)-1]
+					metricCount = len(metrics) - 1
+				}
+			}
+
+			// Send the metrics to be parsed.
+			for i := 0; i < metricCount; i++ {
+				parseChannel <- metrics[i]
+			}
+		}
+
+		// Zero out the buffer for the next read.
+		for b, _ := range buf {
+			buf[b] = 0
+		}
 	}
 }
 
 // readInputUdp parses the buffer for UDP sockets.
 func readInputUdp(conn net.UDPConn, parseChannel chan string, logger Logger) {
 	buf := make([]byte, 512)
-	_, _, err := conn.ReadFromUDP(buf[0:])
+	length, _, err := conn.ReadFromUDP(buf[0:])
 	if err != nil {
 		logger.Error.Println("Could not read stream.", err)
 		return
 	}
-	parseChannel <- strings.TrimSpace(strings.Trim(string(buf), "\x00"))
+	if length != 0 {
+		parseChannel <- string(buf[:length])
+	}
 }

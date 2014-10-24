@@ -60,7 +60,7 @@ func ParseMetricString(metricString string) (*Metric, error) {
 	var metric = new(Metric)
 
 	// First extract the first element which is the namespace.
-	split1 := strings.Split(metricString, SeparatorNamespaceValue)
+	split1 := strings.Split(strings.TrimSpace(strings.Trim(metricString, "\x00")), SeparatorNamespaceValue)
 	if len(split1) == 1 {
 		// We didn't find the ":" separator.
 		return metric, errors.New("Invalid data string")

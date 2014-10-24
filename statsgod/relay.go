@@ -149,9 +149,13 @@ func sendSingleMetricToGraphite(key string, v float64, t string, retry bool, rel
 
 // MockRelay implements MetricRelay.
 type MockRelay struct {
+	FlushInterval time.Duration
+	Percentile    int
 }
 
 // Relay implements MetricRelay::Relay().
 func (c MockRelay) Relay(metric Metric, logger Logger) {
-	logger.Trace.Printf(fmt.Sprintf("Mock flush: %s %v %s", metric.Key, metric.LastValue, metric.MetricType))
+	quantile := float64(c.Percentile) / float64(100)
+	ProcessMetric(&metric, c.FlushInterval, quantile, logger)
+	logger.Trace.Printf(fmt.Sprintf("Mock flush: %v", metric))
 }
