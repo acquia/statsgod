@@ -61,6 +61,11 @@ type ConfigValues struct {
 	Stats struct {
 		Percentile int
 	}
+	Debug struct {
+		Verbose bool
+		Receipt bool
+		Profile bool
+	}
 }
 
 // LoadConfig will read configuration from a specified file.
@@ -80,6 +85,9 @@ func LoadConfig(filePath string) (config ConfigValues, err error) {
 	config.Carbon.Host = "127.0.0.1"
 	config.Carbon.Port = 2003
 	config.Stats.Percentile = 80
+	config.Debug.Verbose = false
+	config.Debug.Receipt = false
+	config.Debug.Profile = false
 
 	// Attempt to read in the file.
 	if filePath != "" {
