@@ -45,9 +45,12 @@ const (
 	// AverageMemoryPerRequest is how much memory we want to use per request.
 	AverageMemoryPerRequest = 10 << 10 // 10 KB
 	// MAXREQS is how many requests.
-	MAXREQS            = AvailableMemory / AverageMemoryPerRequest
-	ConnectionTypeTcp  = 1
-	ConnectionTypeUdp  = 2
+	MAXREQS = AvailableMemory / AverageMemoryPerRequest
+	// ConnectionTypeTcp is the enum value for TCP connections.
+	ConnectionTypeTcp = 1
+	// ConnectionTypeUdp is the enum value for UDP connections.
+	ConnectionTypeUdp = 2
+	// ConnectionTypeUnix is the enum value for Unix connections.
 	ConnectionTypeUnix = 3
 )
 

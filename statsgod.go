@@ -62,7 +62,7 @@ var flushChannel = make(chan *statsgod.Metric, MaxReqs)
 var finishChannel = make(chan int)
 
 // CLI flags.
-var configFile = flag.String("config", "config.yml", "YAML config file path")
+var configFile = flag.String("config", "/etc/statsgod/config.yml", "YAML config file path")
 var debug = flag.Bool("debug", false, "Debugging mode")
 var profile = flag.Bool("profile", false, "Profiling mode")
 

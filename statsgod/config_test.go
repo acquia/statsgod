@@ -25,8 +25,9 @@ import (
 var _ = Describe("Config", func() {
 
 	var (
-		config ConfigValues
-		yaml   ConfigValues
+		config  ConfigValues
+		yaml    ConfigValues
+		fileErr error
 	)
 
 	Describe("Loading runtime configuration", func() {
@@ -53,8 +54,9 @@ var _ = Describe("Config", func() {
 		})
 
 		Context("Loading config file", func() {
-			yaml, _ = LoadConfig("../config.yml")
+			yaml, fileErr = LoadConfig("../example.config.yml")
 			It("should match the defaults", func() {
+				Expect(fileErr).Should(BeNil())
 				Expect(yaml.Service.Name).Should(Equal(config.Service.Name))
 				Expect(yaml.Connection.Tcp.Host).Should(Equal(config.Connection.Tcp.Host))
 				Expect(yaml.Connection.Tcp.Port).Should(Equal(config.Connection.Tcp.Port))

@@ -57,14 +57,14 @@ const (
 
 // Track connections/errors.
 var (
-	connectionCountTcpPool int = 0
-	connectionCountTcp     int = 0
-	connectionCountUdp     int = 0
-	connectionCountUnix    int = 0
-	connectionErrorTcpPool int = 0
-	connectionErrorTcp     int = 0
-	connectionErrorUdp     int = 0
-	connectionErrorUnix    int = 0
+	connectionCountTcpPool int
+	connectionCountTcp     int
+	connectionCountUdp     int
+	connectionCountUnix    int
+	connectionErrorTcpPool int
+	connectionErrorTcp     int
+	connectionErrorUdp     int
+	connectionErrorUnix    int
 )
 
 var logger = *statsgod.CreateLogger(ioutil.Discard, os.Stdout, os.Stdout, os.Stderr)
@@ -187,7 +187,7 @@ func generateMetricNames(numMetrics int, store []Metric) []Metric {
 func sendMetricToStats(metric Metric) {
 
 	rand.Seed(time.Now().UnixNano())
-	var metricValue int = 0
+	var metricValue int
 	switch metric.metricType {
 	case "c":
 		metricValue = 1

@@ -1,0 +1,23 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+
+%:
+	dh $@
+
+override_dh_auto_clean:
+	$(MAKE) clean
+
+override_dh_auto_build:
+	$(MAKE)
+
+override_dh_auto_install:
+	mkdir -p $(CURDIR)/debian/statsgod/usr/bin
+	mkdir -p $(CURDIR)/debian/statsgod/etc/statsgod
+	install -Dm755 $(GOPATH)/bin/statsgod $(CURDIR)/debian/statsgod/usr/bin/statsgod
+	install -m644  $(CURDIR)/example.config.yml $(CURDIR)/debian/statsgod/etc/statsgod/config.yml
+	dh_installinit --no-start --name statsgod
+
+.PHONY: override_dh_auto_clean override_dh_auto_build override_dh_auto_install
