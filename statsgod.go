@@ -39,6 +39,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/signal"
+	"runtime/pprof"
 	"syscall"
 	"time"
 )
@@ -58,9 +59,12 @@ var parseChannel = make(chan string, MaxReqs)
 // The channel containing the Metric objects.
 var flushChannel = make(chan *statsgod.Metric, MaxReqs)
 
+var finishChannel = make(chan int)
+
 // CLI flags.
 var configFile = flag.String("config", "config.yml", "YAML config file path")
 var debug = flag.Bool("debug", false, "Debugging mode")
+var profile = flag.Bool("profile", false, "Profiling mode")
 
 var backendRelay statsgod.MetricRelay
 
@@ -73,9 +77,20 @@ func main() {
 	// Load the YAML config.
 	var config, _ = statsgod.LoadConfig(*configFile)
 
-	if *debug {
+	if *profile || config.Debug.Profile {
+		// Allow the flag to override the config.
+		config.Debug.Profile = true
+		f, err := os.Create("statsgod.prof")
+		if err != nil {
+			panic(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+
+	if *debug || config.Debug.Verbose {
 		// Allow the debug flag to override config.
-		config.Service.Debug = true
+		config.Debug.Verbose = true
 		logger = *statsgod.CreateLogger(os.Stdout, os.Stdout, os.Stdout, os.Stderr)
 		logger.Info.Println("Debugging mode enabled")
 	} else {
@@ -99,6 +114,8 @@ func main() {
 		logger.Info.Println("Relaying metrics to carbon backend")
 	default:
 		relay := statsgod.CreateRelay("mock").(*statsgod.MockRelay)
+		relay.FlushInterval = config.Relay.Flush
+		relay.Percentile = config.Stats.Percentile
 		backendRelay = statsgod.MetricRelay(relay)
 		logger.Info.Println("Relaying metrics to mock backend")
 	}
@@ -137,10 +154,13 @@ func main() {
 		socketTcp.Close(logger)
 		socketUdp.Close(logger)
 		socketUnix.Close(logger)
-		os.Exit(1)
+		finishChannel <- 1
 	}()
 
-	select {}
+	select {
+	case <-finishChannel:
+		logger.Info.Println("Exiting program.")
+	}
 }
 
 // Parses the strings received from clients and creates Metric structures.
@@ -153,7 +173,7 @@ func parseMetrics(logger statsgod.Logger) {
 		case metricString := <-parseChannel:
 			metric, err := statsgod.ParseMetricString(metricString)
 			if err != nil {
-				logger.Trace.Printf("Invalid metric: %v", metricString)
+				logger.Error.Printf("Invalid metric: %v", metricString)
 				continue
 			}
 			// Push the metric onto the channel to be aggregated and flushed.
@@ -182,7 +202,9 @@ func flushMetrics(logger statsgod.Logger, config statsgod.ConfigValues) {
 		select {
 		case metric := <-flushChannel:
 			statsgod.AggregateMetric(metrics, *metric)
-			logger.Trace.Printf("Metric: %v", metrics[metric.Key])
+			if config.Debug.Receipt {
+				logger.Info.Printf("Metric: %v", metrics[metric.Key])
+			}
 		case <-time.After(config.Relay.Flush):
 			logger.Trace.Println("Metric Channel Timeout")
 			// Nothing to read, attempt to flush.
