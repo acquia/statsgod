@@ -3,7 +3,6 @@
 ###
 service:
     name: statsgod
-    debug: false
 
 ###
 # Socket connections
@@ -39,3 +38,11 @@ relay:
 ###
 stats:
     percentile: 80
+
+###
+# Debug options
+###
+debug:
+    verbose: false # Increases the logging output.
+    receipt: false # Logs a message with the parsed metric.
+    profile: false # Profile the program with runtime/pprof.
