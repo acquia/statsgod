@@ -40,6 +40,25 @@ var _ = Describe("Sockets", func() {
 		{SocketTypeUnix, "unix", "/tmp/statsgod.sock", "/dev/null", "test.unix:4|c"},
 	}
 
+	sockets := make([]Socket, 3)
+	parseChannel := make(chan string)
+	logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
+
+	BeforeEach(func() {
+		for i, ts := range testSockets {
+			socket := CreateSocket(ts.socketType, ts.socketAddr)
+			go socket.Listen(parseChannel, logger)
+			BlockForSocket(socket, time.Second)
+			sockets[i] = socket
+		}
+	})
+
+	AfterEach(func() {
+		for i, _ := range testSockets {
+			sockets[i].Close(logger)
+		}
+	})
+
 	Describe("Testing the Socket interface", func() {
 		It("should contain the required functions", func() {
 			for _, ts := range testSockets {
@@ -62,22 +81,16 @@ var _ = Describe("Sockets", func() {
 	})
 
 	Describe("Testing the Socket functionality", func() {
-		parseChannel := make(chan string)
-		logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
 		It("should be able to recieve messages", func() {
-			for _, ts := range testSockets {
-				socket := CreateSocket(ts.socketType, ts.socketAddr)
-				go socket.Listen(parseChannel, logger)
-				BlockForSocket(socket, time.Second)
-				sendSocketMessage(ts.socketDesc, socket, ts.socketMessage)
+			for i, ts := range testSockets {
+				sendSocketMessage(ts.socketDesc, sockets[i], ts.socketMessage)
 				message := ""
 				select {
 				case message = <-parseChannel:
-				case <-time.After(10 * time.Second):
+				case <-time.After(5 * time.Second):
 					message = ""
 				}
 				Expect(message).Should(Equal(ts.socketMessage))
-				socket.Close(logger)
 			}
 		})
 
@@ -94,6 +107,16 @@ var _ = Describe("Sockets", func() {
 				Expect(func() { socket.Listen(parseChannel, logger) }).Should(Panic())
 			}
 		})
+
+		Measure("it should receive metrics quickly.", func(b Benchmarker) {
+			runtime := b.Time("runtime", func() {
+				for i, ts := range testSockets {
+					sendSocketMessage(ts.socketDesc, sockets[i], ts.socketMessage)
+				}
+			})
+
+			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.5), "it should receive metrics quickly.")
+		}, 100)
 
 	})
 })
