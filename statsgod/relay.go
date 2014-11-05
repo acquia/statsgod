@@ -26,6 +26,11 @@ import (
 	"time"
 )
 
+const (
+	RelayTypeCarbon = "carbon"
+	RelayTypeMock   = "mock"
+)
+
 // MetricRelay defines the interface for a back end implementation.
 type MetricRelay interface {
 	Relay(metric Metric, logger Logger)
@@ -34,9 +39,9 @@ type MetricRelay interface {
 // CreateRelay is a factory for instantiating remote relays.
 func CreateRelay(relayType string) MetricRelay {
 	switch relayType {
-	case "carbon":
+	case RelayTypeCarbon:
 		return new(CarbonRelay)
-	case "mock":
+	case RelayTypeMock:
 		return new(MockRelay)
 	}
 	return new(MockRelay)

@@ -78,7 +78,7 @@ func LoadConfig(filePath string) (config ConfigValues, err error) {
 	config.Connection.Udp.Host = "127.0.0.1"
 	config.Connection.Udp.Port = 8126
 	config.Connection.Unix.File = "/var/run/statsgod.sock"
-	config.Relay.Type = "carbon"
+	config.Relay.Type = RelayTypeCarbon
 	config.Relay.Concurrency = 1
 	config.Relay.Timeout = 30 * time.Second
 	config.Relay.Flush = 10 * time.Second
