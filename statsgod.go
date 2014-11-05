@@ -101,9 +101,9 @@ func main() {
 
 	// Set up the backend relay.
 	switch config.Relay.Type {
-	case "carbon":
+	case statsgod.RelayTypeCarbon:
 		// Create a relay to carbon.
-		relay := statsgod.CreateRelay("carbon").(*statsgod.CarbonRelay)
+		relay := statsgod.CreateRelay(statsgod.RelayTypeCarbon).(*statsgod.CarbonRelay)
 		relay.FlushInterval = config.Relay.Flush
 		relay.Percentile = config.Stats.Percentile
 		// Create a connection pool for the relay to use.
@@ -112,8 +112,10 @@ func main() {
 		relay.ConnectionPool = pool
 		backendRelay = statsgod.MetricRelay(relay)
 		logger.Info.Println("Relaying metrics to carbon backend")
+	case statsgod.RelayTypeMock:
+		fallthrough
 	default:
-		relay := statsgod.CreateRelay("mock").(*statsgod.MockRelay)
+		relay := statsgod.CreateRelay(statsgod.RelayTypeMock).(*statsgod.MockRelay)
 		relay.FlushInterval = config.Relay.Flush
 		relay.Percentile = config.Stats.Percentile
 		backendRelay = statsgod.MetricRelay(relay)
