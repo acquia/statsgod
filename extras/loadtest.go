@@ -38,6 +38,7 @@ var flushTime = flag.Duration("flushTime", 1*time.Second, "How frequently to sen
 var concurrency = flag.Int("concurrency", 1, "How many concurrent generators to run.")
 var runTime = flag.Duration("runTime", 30*time.Second, "How long to run the test.")
 var connType = flag.Int("connType", 0, "0 for all, 1 for TCP, 2 for TCP Pool, 3 for UDP, 4 for Unix.")
+var logSent = flag.Bool("logSent", false, "Log each metric sent.")
 
 // Metric is our main data type.
 type Metric struct {
@@ -93,7 +94,9 @@ runloop:
 	for {
 		select {
 		case <-flushTicker:
-			fmt.Printf("-")
+			if !*logSent {
+				fmt.Printf("-")
+			}
 		case <-finishTicker:
 			break runloop
 		}
@@ -204,6 +207,7 @@ func sendMetricToStats(metric Metric) {
 		connectionCountTcpPool++
 		if err == nil {
 			_, err := c.Write([]byte(stringValue + "\n"))
+			logSentMetric(stringValue)
 			if err != nil {
 				connectionErrorTcpPool++
 				defer tcpPool.ReleaseConnection(c, true, logger)
@@ -219,6 +223,7 @@ func sendMetricToStats(metric Metric) {
 		connectionCountTcp++
 		if err == nil {
 			c.Write([]byte(stringValue + "\n"))
+			logSentMetric(stringValue)
 			defer c.Close()
 		} else {
 			connectionErrorTcp++
@@ -229,6 +234,7 @@ func sendMetricToStats(metric Metric) {
 		connectionCountUdp++
 		if err == nil {
 			c.Write([]byte(stringValue))
+			logSentMetric(stringValue)
 			defer c.Close()
 		} else {
 			connectionErrorUdp++
@@ -239,6 +245,7 @@ func sendMetricToStats(metric Metric) {
 		connectionCountUnix++
 		if err == nil {
 			c.Write([]byte(stringValue))
+			logSentMetric(stringValue)
 			defer c.Close()
 		} else {
 			connectionErrorUnix++
@@ -246,4 +253,11 @@ func sendMetricToStats(metric Metric) {
 		}
 	}
 
+}
+
+// logSentMetric will log the metric string for QA spot checking.
+func logSentMetric(metric string) {
+	if *logSent {
+		fmt.Printf("%s\n", metric)
+	}
 }
