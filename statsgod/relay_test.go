@@ -44,12 +44,12 @@ var _ = Describe("Relay", func() {
 		Context("when using the factory function", func() {
 			It("should be a complete structure", func() {
 				// Tests that we can get a mock relay.
-				mockRelay := CreateRelay("mock")
+				mockRelay := CreateRelay(RelayTypeMock)
 				Expect(mockRelay).ShouldNot(Equal(nil))
 				Expect(reflect.TypeOf(mockRelay).String()).Should(Equal("*statsgod.MockRelay"))
 
 				// Tests that we can get a carbon relay.
-				carbonRelay := CreateRelay("carbon")
+				carbonRelay := CreateRelay(RelayTypeCarbon)
 				Expect(carbonRelay).ShouldNot(Equal(nil))
 				Expect(reflect.TypeOf(carbonRelay).String()).Should(Equal("*statsgod.CarbonRelay"))
 
@@ -62,7 +62,7 @@ var _ = Describe("Relay", func() {
 
 		Context("when creating a CarbonRelay", func() {
 			It("should be a complete structure", func() {
-				backendRelay := CreateRelay("carbon").(*CarbonRelay)
+				backendRelay := CreateRelay(RelayTypeCarbon).(*CarbonRelay)
 				Expect(backendRelay.FlushInterval).ShouldNot(Equal(nil))
 				Expect(backendRelay.Percentile).ShouldNot(Equal(nil))
 				// At this point the connection pool has not been established.
@@ -83,7 +83,7 @@ var _ = Describe("Relay", func() {
 
 		Context("when creating a MockRelay", func() {
 			It("should be a complete structure", func() {
-				backendRelay := CreateRelay("mock").(*MockRelay)
+				backendRelay := CreateRelay(RelayTypeMock).(*MockRelay)
 				metricOne, _ := ParseMetricString("test.one:3|c")
 				logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
 				backendRelay.Relay(*metricOne, logger)
