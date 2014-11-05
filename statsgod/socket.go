@@ -258,7 +258,7 @@ func readInput(conn net.Conn, parseChannel chan string, logger Logger) {
 		}
 
 		// Zero out the buffer for the next read.
-		for b, _ := range buf {
+		for b := range buf {
 			buf[b] = 0
 		}
 	}

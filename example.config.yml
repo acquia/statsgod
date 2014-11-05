@@ -15,7 +15,7 @@ connection:
         host: 127.0.0.1
         port: 8126
     unix:
-        file: /var/run/statsgod/statsgod.sock
+        file: /var/run/statsgod.sock
 
 ###
 # Backend relay carbon server configuration

@@ -1,0 +1,16 @@
+Source: statsgod
+Section: web
+Priority: optional
+Maintainer: Acquia <hosting-eng@acquia.com>
+Build-Depends: debhelper (>= 9.0.0)
+Standards-Version: 3.9.5
+Homepage: http://github.com/acquia/statsgod
+
+Package: statsgod
+Section: web
+Priority: extra
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Network metric aggregator.
+ Metrics are sent using TCP, UDP or Unix sockets then aggregated and relayed to
+ a backend service.

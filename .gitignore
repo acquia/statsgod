@@ -7,6 +7,14 @@
 _obj
 _test
 
+# Debian build
+debian/statsgod.debhelper.log
+debian/statsgod.postinst.debhelper
+debian/statsgod.postrm.debhelper
+debian/statsgod.prerm.debhelper
+debian/statsgod.substvars
+debian/statsgod/*
+
 # Architecture specific extensions/prefixes
 *.[568vq]
 [568vq].out
