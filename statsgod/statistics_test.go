@@ -54,6 +54,14 @@ var _ = Describe("Statistics", func() {
 				Expect(max).Should(Equal(float64(5)))
 				Expect(err).ShouldNot(BeNil())
 			})
+
+			Measure("it should find min/max quickly.", func(b Benchmarker) {
+				runtime := b.Time("runtime", func() {
+					min, max, _ = values.Minmax()
+				})
+				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.15), "it should find min/max quickly.")
+			}, 100000)
+
 		})
 
 		Context("when the Median is applied", func() {
@@ -67,10 +75,20 @@ var _ = Describe("Statistics", func() {
 				median = values.Median()
 				Expect(median).Should(Equal(float64(511.5)))
 
+				valuesOriginal := values
 				values = ValueSlice{}
 				median = values.Median()
 				Expect(median).Should(Equal(float64(0.0)))
+				values = valuesOriginal
 			})
+
+			Measure("it should find median quickly.", func(b Benchmarker) {
+				runtime := b.Time("runtime", func() {
+					median = values.Median()
+				})
+				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.15), "it should find median quickly.")
+			}, 100000)
+
 		})
 
 		Context("when the Mean is applied", func() {
@@ -79,6 +97,14 @@ var _ = Describe("Statistics", func() {
 			It("should find the mean value", func() {
 				Expect(mean).Should(Equal(float64(510.25)))
 			})
+
+			Measure("it should find mean quickly.", func(b Benchmarker) {
+				runtime := b.Time("runtime", func() {
+					mean = values.Mean()
+				})
+				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.15), "it should find mean quickly.")
+			}, 100000)
+
 		})
 
 		Context("when the Quantile is applied", func() {
@@ -97,10 +123,21 @@ var _ = Describe("Statistics", func() {
 				q25 := values.Quantile(0.25)
 				Expect(q25).Should(Equal(float64(372.75)))
 
+				valuesOriginal := values
 				values = ValueSlice{}
 				q0 := values.Quantile(1)
 				Expect(q0).Should(Equal(float64(0.0)))
+				values = valuesOriginal
 			})
+
+			testQuantile := float64(0.0)
+			Measure("it should find quantile quickly.", func(b Benchmarker) {
+				runtime := b.Time("runtime", func() {
+					testQuantile = values.Quantile(0.9)
+				})
+				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.15), "it should find quantile quickly.")
+			}, 100000)
+
 		})
 	})
 })
