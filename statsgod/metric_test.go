@@ -32,7 +32,7 @@ func getDefaultMetricStructure() Metric {
 	return *metric
 }
 
-var _ = Describe("Connection Pool", func() {
+var _ = Describe("Metrics", func() {
 
 	Describe("Testing the basic structure", func() {
 		metric := getDefaultMetricStructure()
@@ -73,6 +73,18 @@ var _ = Describe("Connection Pool", func() {
 				_, errFour := ParseMetricString("test:three|g")
 				Expect(errFour).ShouldNot(Equal(nil))
 			})
+
+			Measure("it should be able to parse metric strings quickly.", func(b Benchmarker) {
+				runtime := b.Time("runtime", func() {
+					metric, _ := ParseMetricString("test:1|g")
+					metric, _ = ParseMetricString("test:2|c")
+					metric, _ = ParseMetricString("test:3|ms")
+					Expect(metric).ShouldNot(Equal(nil))
+				})
+
+				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.15), "it should be able to parse metric strings quickly.")
+
+			}, 100000)
 
 		})
 
@@ -119,6 +131,16 @@ var _ = Describe("Connection Pool", func() {
 				Expect(existingMetric.TotalHits).Should(Equal(2))
 				Expect(existingMetric.LastValue).Should(Equal(float64(33)))
 			})
+
+			Measure("it should aggregate metrics quickly.", func(b Benchmarker) {
+				metrics := make(map[string]Metric)
+				metric, _ := ParseMetricString("test:1|c")
+				runtime := b.Time("runtime", func() {
+					AggregateMetric(metrics, *metric)
+				})
+
+				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.15), "it should aggregate metrics quickly.")
+			}, 100000)
 		})
 
 		Context("when we process metrics", func() {
@@ -169,6 +191,15 @@ var _ = Describe("Connection Pool", func() {
 				Expect(metricTimer.SumInThreshold).Should(Equal(float64(645)))
 				Expect(metricTimer.LastValue).Should(Equal(float64(169)))
 			})
+
+			Measure("it should process metrics quickly.", func(b Benchmarker) {
+				metric := metrics["test.gauge"]
+				runtime := b.Time("runtime", func() {
+					ProcessMetric(&metric, time.Second*10, float64(0.8), logger)
+				})
+
+				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.15), "it should process metrics quickly.")
+			}, 100000)
 
 		})
 	})
