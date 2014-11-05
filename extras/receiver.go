@@ -18,7 +18,7 @@
 package main
 
 /**
- * Test receiver used to debug statsgod that listens on localhost:5001
+ * Test receiver used to debug statsgod that listens on localhost:2003
  */
 
 import (
@@ -30,7 +30,7 @@ import (
 )
 
 func main() {
-	ln, err := net.Listen("tcp", ":5001")
+	ln, err := net.Listen("tcp", ":2003")
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
