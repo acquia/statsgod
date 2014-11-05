@@ -153,15 +153,15 @@ func main() {
 	go func() {
 		s := <-signalChannel
 		logger.Info.Printf("Processed signal %v", s)
-		socketTcp.Close(logger)
-		socketUdp.Close(logger)
-		socketUnix.Close(logger)
 		finishChannel <- 1
 	}()
 
 	select {
 	case <-finishChannel:
 		logger.Info.Println("Exiting program.")
+		socketTcp.Close(logger)
+		socketUdp.Close(logger)
+		socketUnix.Close(logger)
 	}
 }
 
