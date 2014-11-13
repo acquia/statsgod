@@ -56,15 +56,10 @@ type CarbonRelay struct {
 
 // Relay implements MetricRelay::Relay().
 func (c CarbonRelay) Relay(metric Metric, logger Logger) {
-	sendToGraphite(metric, c, logger)
-}
-
-// sendToGraphite sends the metric to the specified host/port.
-func sendToGraphite(m Metric, c CarbonRelay, logger Logger) {
 	quantile := float64(c.Percentile) / float64(100)
-	ProcessMetric(&m, c.FlushInterval, quantile, logger)
+	ProcessMetric(&metric, c.FlushInterval, quantile, logger)
 	// @todo: are we ever setting flush time?
-	stringTime := strconv.Itoa(m.FlushTime)
+	stringTime := strconv.Itoa(metric.FlushTime)
 	var gkey string
 
 	defer logger.Info.Println("Done sending to Graphite")
@@ -73,45 +68,45 @@ func sendToGraphite(m Metric, c CarbonRelay, logger Logger) {
 	// http://blog.pkhamre.com/2012/07/24/understanding-statsd-and-graphite/
 	// Ensure all of the metrics are working correctly.
 
-	switch m.MetricType {
+	switch metric.MetricType {
 	case "gauge":
-		gkey = fmt.Sprintf("stats.gauges.%s", m.Key)
-		sendSingleMetricToGraphite(gkey, m.LastValue, stringTime, true, c, logger)
+		gkey = fmt.Sprintf("stats.gauges.%s", metric.Key)
+		sendCarbonMetric(gkey, metric.LastValue, stringTime, true, c, logger)
 	case "counter":
-		gkey = fmt.Sprintf("stats.%s", m.Key)
-		sendSingleMetricToGraphite(gkey, m.ValuesPerSecond, stringTime, true, c, logger)
+		gkey = fmt.Sprintf("stats.%s", metric.Key)
+		sendCarbonMetric(gkey, metric.ValuesPerSecond, stringTime, true, c, logger)
 
-		gkey = fmt.Sprintf("stats_counts.%s", m.Key)
-		sendSingleMetricToGraphite(gkey, m.LastValue, stringTime, true, c, logger)
+		gkey = fmt.Sprintf("stats_counts.%s", metric.Key)
+		sendCarbonMetric(gkey, metric.LastValue, stringTime, true, c, logger)
 	case "timer":
 		// Cumulative values.
-		gkey = fmt.Sprintf("stats.timers.%s.mean_value", m.Key)
-		sendSingleMetricToGraphite(gkey, m.MeanValue, stringTime, true, c, logger)
+		gkey = fmt.Sprintf("stats.timers.%s.mean_value", metric.Key)
+		sendCarbonMetric(gkey, metric.MeanValue, stringTime, true, c, logger)
 
-		gkey = fmt.Sprintf("stats.timers.%s.median_value", m.Key)
-		sendSingleMetricToGraphite(gkey, m.MedianValue, stringTime, true, c, logger)
+		gkey = fmt.Sprintf("stats.timers.%s.median_value", metric.Key)
+		sendCarbonMetric(gkey, metric.MedianValue, stringTime, true, c, logger)
 
-		gkey = fmt.Sprintf("stats.timers.%s.max_value", m.Key)
-		sendSingleMetricToGraphite(gkey, m.MaxValue, stringTime, true, c, logger)
+		gkey = fmt.Sprintf("stats.timers.%s.max_value", metric.Key)
+		sendCarbonMetric(gkey, metric.MaxValue, stringTime, true, c, logger)
 
-		gkey = fmt.Sprintf("stats.timers.%s.min_value", m.Key)
-		sendSingleMetricToGraphite(gkey, m.MinValue, stringTime, true, c, logger)
+		gkey = fmt.Sprintf("stats.timers.%s.min_value", metric.Key)
+		sendCarbonMetric(gkey, metric.MinValue, stringTime, true, c, logger)
 
 		// Quantile values.
-		gkey = fmt.Sprintf("stats.timers.%s.mean_%d", m.Key, c.Percentile)
-		sendSingleMetricToGraphite(gkey, m.MeanInThreshold, stringTime, true, c, logger)
+		gkey = fmt.Sprintf("stats.timers.%s.mean_%d", metric.Key, c.Percentile)
+		sendCarbonMetric(gkey, metric.MeanInThreshold, stringTime, true, c, logger)
 
-		gkey = fmt.Sprintf("stats.timers.%s.upper_%d", m.Key, c.Percentile)
-		sendSingleMetricToGraphite(gkey, m.MaxInThreshold, stringTime, true, c, logger)
+		gkey = fmt.Sprintf("stats.timers.%s.upper_%d", metric.Key, c.Percentile)
+		sendCarbonMetric(gkey, metric.MaxInThreshold, stringTime, true, c, logger)
 
-		gkey = fmt.Sprintf("stats.timers.%s.sum_%d", m.Key, c.Percentile)
-		sendSingleMetricToGraphite(gkey, m.SumInThreshold, stringTime, true, c, logger)
+		gkey = fmt.Sprintf("stats.timers.%s.sum_%d", metric.Key, c.Percentile)
+		sendCarbonMetric(gkey, metric.SumInThreshold, stringTime, true, c, logger)
 	}
 
 }
 
-// sendSingleMetricToGraphite formats a message and a value and time and sends to Graphite.
-func sendSingleMetricToGraphite(key string, v float64, t string, retry bool, relay CarbonRelay, logger Logger) {
+// sendCarbonMetric formats a message and a value and time and sends to Graphite.
+func sendCarbonMetric(key string, v float64, t string, retry bool, relay CarbonRelay, logger Logger) {
 	var releaseErr error
 	dataSent := false
 
@@ -148,7 +143,7 @@ func sendSingleMetricToGraphite(key string, v float64, t string, retry bool, rel
 	// If data was not sent, likely a socket timeout, we'll retry one time.
 	if !dataSent && retry {
 		logger.Error.Printf("Metric not sent, retrying %v", payload)
-		sendSingleMetricToGraphite(key, v, t, false, relay, logger)
+		sendCarbonMetric(key, v, t, false, relay, logger)
 	}
 }
 
