@@ -12,7 +12,7 @@ else
 GOM=gom
 endif
 
-all: deps ${project}
+all: ${project}
 
 clean:
 	rm -rf _vendor 
@@ -33,11 +33,13 @@ lint: deps
 	$(foreach p, $(PACKAGES), $(GOM) exec golint ./$(p)/.; )
 
 test: deps lint
-	$(GOM) exec go test -covermode=count -coverprofile=coverage.out .
-	$(GOM) exec ginkgo -cover=true ./statsgod/.
+	(test -f coverage.out && "$(TRAVIS)" == "true") || \
+		$(GOM) exec go test -covermode=count -coverprofile=coverage.out .
+	(test -f statsgod/statsgod.coverprofile && "$(TRAVIS)" == "true") || \
+		$(GOM) exec ginkgo -cover=true ./statsgod/.
 
 deb: 
-	dpkg-buildpackage -b -d -tc
+	dpkg-buildpackage -uc -b -d -tc
 
 recv:
 	go run -race extras/receiver/test_receiver.go

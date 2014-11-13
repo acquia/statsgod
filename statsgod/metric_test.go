@@ -82,7 +82,7 @@ var _ = Describe("Metrics", func() {
 					Expect(metric).ShouldNot(Equal(nil))
 				})
 
-				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.15), "it should be able to parse metric strings quickly.")
+				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.25), "it should be able to parse metric strings quickly.")
 
 			}, 100000)
 
@@ -139,7 +139,7 @@ var _ = Describe("Metrics", func() {
 					AggregateMetric(metrics, *metric)
 				})
 
-				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.15), "it should aggregate metrics quickly.")
+				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.25), "it should aggregate metrics quickly.")
 			}, 100000)
 		})
 
@@ -198,7 +198,7 @@ var _ = Describe("Metrics", func() {
 					ProcessMetric(&metric, time.Second*10, float64(0.8), logger)
 				})
 
-				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.15), "it should process metrics quickly.")
+				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.25), "it should process metrics quickly.")
 			}, 100000)
 
 		})
