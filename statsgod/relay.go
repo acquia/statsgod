@@ -27,8 +27,10 @@ import (
 )
 
 const (
+	// RelayTypeCarbon is an enum describing a carbon backend relay.
 	RelayTypeCarbon = "carbon"
-	RelayTypeMock   = "mock"
+	// RelayTypeMock is an enum describing a mock backend relay.
+	RelayTypeMock = "mock"
 )
 
 // MetricRelay defines the interface for a back end implementation.

@@ -24,6 +24,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -174,7 +175,9 @@ func (l *SocketUnix) Listen(parseChannel chan string, logger Logger) {
 	if l.Addr == "" {
 		panic("Could not establish a Unix socket. No sock file specified.")
 	}
+	oldMask := syscall.Umask(0011)
 	listener, err := net.Listen("unix", l.Addr)
+	_ = syscall.Umask(oldMask)
 	if err != nil {
 		panic(fmt.Sprintf("Could not establish a Unix socket. %s", err))
 	}

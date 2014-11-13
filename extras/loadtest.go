@@ -37,7 +37,7 @@ var numMetrics = flag.Int("numMetrics", 10, "Number of metrics per thread.")
 var flushTime = flag.Duration("flushTime", 1*time.Second, "How frequently to send metrics.")
 var concurrency = flag.Int("concurrency", 1, "How many concurrent generators to run.")
 var runTime = flag.Duration("runTime", 30*time.Second, "How long to run the test.")
-var connType = flag.Int("connType", 0, "0 for all, 1 for TCP, 2 for TCP Pool, 3 for UDP, 4 for Unix.")
+var connType = flag.Int("connType", 0, "0 for all, 1 for TCP, 2 for TCP Pool, 3 for UDP, 4 for Unix, 5 for Unix Pool.")
 var logSent = flag.Bool("logSent", false, "Log each metric sent.")
 
 // Metric is our main data type.
@@ -50,30 +50,37 @@ type Metric struct {
 
 // Connection Types enum.
 const (
-	ConnectionTypeTcpPool = 1
-	ConnectionTypeTcp     = 2
-	ConnectionTypeUdp     = 3
-	ConnectionTypeUnix    = 4
+	ConnectionTypeTcp      = 1
+	ConnectionTypeTcpPool  = 2
+	ConnectionTypeUdp      = 3
+	ConnectionTypeUnix     = 4
+	ConnectionTypeUnixPool = 5
 )
 
 // Track connections/errors.
 var (
-	connectionCountTcpPool int
-	connectionCountTcp     int
-	connectionCountUdp     int
-	connectionCountUnix    int
-	connectionErrorTcpPool int
-	connectionErrorTcp     int
-	connectionErrorUdp     int
-	connectionErrorUnix    int
+	connectionCountTcpPool  int
+	connectionCountTcp      int
+	connectionCountUdp      int
+	connectionCountUnixPool int
+	connectionCountUnix     int
+	connectionErrorTcpPool  int
+	connectionErrorTcp      int
+	connectionErrorUdp      int
+	connectionErrorUnixPool int
+	connectionErrorUnix     int
+	tcpPool                 *statsgod.ConnectionPool
+	unixPool                *statsgod.ConnectionPool
 )
 
 var logger = *statsgod.CreateLogger(ioutil.Discard, os.Stdout, os.Stdout, os.Stderr)
-var tcpPool, err = statsgod.CreateConnectionPool(*statsPoolCount, *statsHost, *statsPortTcp, 10*time.Second, logger)
 
 func main() {
 	flag.Parse()
 	fmt.Printf("Starting test with %d metrics on %d concurrent threads for %s.\n", *numMetrics, *concurrency, *runTime)
+
+	tcpPool, _ = statsgod.CreateConnectionPool(*statsPoolCount, fmt.Sprintf("%s:%d", *statsHost, *statsPortTcp), statsgod.ConnPoolTypeTcp, 10*time.Second, logger)
+	unixPool, _ = statsgod.CreateConnectionPool(*statsPoolCount, *statsSock, statsgod.ConnPoolTypeUnix, 10*time.Second, logger)
 
 	startTime := time.Now()
 
@@ -106,12 +113,13 @@ runloop:
 	totalTime := time.Since(startTime)
 
 	// Print the output.
-	printReqPerSecond("TCP (pool)", connectionCountTcpPool, connectionErrorTcpPool, totalTime)
 	printReqPerSecond("TCP", connectionCountTcp, connectionErrorTcp, totalTime)
+	printReqPerSecond("TCP (pool)", connectionCountTcpPool, connectionErrorTcpPool, totalTime)
 	printReqPerSecond("UDP", connectionCountUdp, connectionErrorUdp, totalTime)
 	printReqPerSecond("Unix", connectionCountUnix, connectionErrorUnix, totalTime)
-	totalCount := connectionCountTcpPool + connectionCountTcp + connectionCountUdp + connectionCountUnix
-	totalError := connectionErrorTcpPool + connectionErrorTcp + connectionErrorUdp + connectionErrorUnix
+	printReqPerSecond("Unix (pool)", connectionCountUnixPool, connectionErrorUnixPool, totalTime)
+	totalCount := connectionCountTcpPool + connectionCountTcp + connectionCountUdp + connectionCountUnixPool + connectionCountUnix
+	totalError := connectionErrorTcpPool + connectionErrorTcp + connectionErrorUdp + connectionErrorUnixPool + connectionErrorUnix
 	printReqPerSecond("Total", totalCount, totalError, totalTime)
 }
 
@@ -202,6 +210,17 @@ func sendMetricToStats(metric Metric) {
 	stringValue := fmt.Sprintf("%s:%d|%s", metric.key, metricValue, metric.metricType)
 	// Send to the designated connection
 	switch metric.connectionType {
+	case ConnectionTypeTcp:
+		c, err := net.Dial("tcp", fmt.Sprintf("%s:%d", *statsHost, *statsPortTcp))
+		connectionCountTcp++
+		if err == nil {
+			c.Write([]byte(stringValue + "\n"))
+			logSentMetric(stringValue)
+			defer c.Close()
+		} else {
+			connectionErrorTcp++
+			return
+		}
 	case ConnectionTypeTcpPool:
 		c, err := tcpPool.GetConnection(logger)
 		connectionCountTcpPool++
@@ -214,17 +233,6 @@ func sendMetricToStats(metric Metric) {
 			} else {
 				defer tcpPool.ReleaseConnection(c, false, logger)
 			}
-		} else {
-			connectionErrorTcp++
-			return
-		}
-	case ConnectionTypeTcp:
-		c, err := net.Dial("tcp", fmt.Sprintf("%s:%d", *statsHost, *statsPortTcp))
-		connectionCountTcp++
-		if err == nil {
-			c.Write([]byte(stringValue + "\n"))
-			logSentMetric(stringValue)
-			defer c.Close()
 		} else {
 			connectionErrorTcp++
 			return
@@ -251,8 +259,23 @@ func sendMetricToStats(metric Metric) {
 			connectionErrorUnix++
 			return
 		}
+	case ConnectionTypeUnixPool:
+		c, err := unixPool.GetConnection(logger)
+		connectionCountUnixPool++
+		if err == nil {
+			_, err := c.Write([]byte(stringValue + "\n"))
+			logSentMetric(stringValue)
+			if err != nil {
+				connectionErrorUnixPool++
+				defer unixPool.ReleaseConnection(c, true, logger)
+			} else {
+				defer unixPool.ReleaseConnection(c, false, logger)
+			}
+		} else {
+			connectionErrorUnixPool++
+			return
+		}
 	}
-
 }
 
 // logSentMetric will log the metric string for QA spot checking.
