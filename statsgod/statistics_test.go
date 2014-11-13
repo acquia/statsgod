@@ -59,7 +59,7 @@ var _ = Describe("Statistics", func() {
 				runtime := b.Time("runtime", func() {
 					min, max, _ = values.Minmax()
 				})
-				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.15), "it should find min/max quickly.")
+				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.25), "it should find min/max quickly.")
 			}, 100000)
 
 		})
@@ -86,7 +86,7 @@ var _ = Describe("Statistics", func() {
 				runtime := b.Time("runtime", func() {
 					median = values.Median()
 				})
-				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.15), "it should find median quickly.")
+				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.25), "it should find median quickly.")
 			}, 100000)
 
 		})
@@ -102,7 +102,7 @@ var _ = Describe("Statistics", func() {
 				runtime := b.Time("runtime", func() {
 					mean = values.Mean()
 				})
-				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.15), "it should find mean quickly.")
+				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.25), "it should find mean quickly.")
 			}, 100000)
 
 		})
@@ -135,7 +135,7 @@ var _ = Describe("Statistics", func() {
 				runtime := b.Time("runtime", func() {
 					testQuantile = values.Quantile(0.9)
 				})
-				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.15), "it should find quantile quickly.")
+				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.25), "it should find quantile quickly.")
 			}, 100000)
 
 		})

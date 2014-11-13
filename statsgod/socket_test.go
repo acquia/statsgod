@@ -26,44 +26,44 @@ import (
 	"time"
 )
 
-var _ = Describe("Sockets", func() {
-	// Table for running the socket tests.
-	var testSockets = []struct {
-		socketType    int
-		socketDesc    string
-		socketAddr    string
-		badAddr       string
-		socketMessage string
-	}{
-		{SocketTypeTcp, "tcp", "127.0.0.1:0", "0.0.0.0", "test.tcp:4|c"},
-		{SocketTypeUdp, "udp", "127.0.0.1:0", "", "test.udp:4|c"},
-		{SocketTypeUnix, "unix", "/tmp/statsgod.sock", "/dev/null", "test.unix:4|c"},
+// Table for running the socket tests.
+var testSockets = []struct {
+	socketType    int
+	socketDesc    string
+	socketAddr    string
+	badAddr       string
+	socketMessage string
+}{
+	{SocketTypeTcp, "tcp", "127.0.0.1:0", "0.0.0.0", "test.tcp:4|c"},
+	{SocketTypeUdp, "udp", "127.0.0.1:0", "", "test.udp:4|c"},
+	{SocketTypeUnix, "unix", "/tmp/statsgod.sock", "/dev/null", "test.unix:4|c"},
+}
+
+var sockets = make([]Socket, 3)
+var parseChannel = make(chan string)
+var logger = *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
+
+var _ = BeforeSuite(func() {
+	for i, ts := range testSockets {
+		socket := CreateSocket(ts.socketType, ts.socketAddr)
+		go socket.Listen(parseChannel, logger)
+		BlockForSocket(socket, time.Second)
+		sockets[i] = socket
 	}
+})
 
-	sockets := make([]Socket, 3)
-	parseChannel := make(chan string)
-	logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
+var _ = AfterSuite(func() {
+	for i, _ := range testSockets {
+		sockets[i].Close(logger)
+	}
+})
 
-	BeforeEach(func() {
-		for i, ts := range testSockets {
-			socket := CreateSocket(ts.socketType, ts.socketAddr)
-			go socket.Listen(parseChannel, logger)
-			BlockForSocket(socket, time.Second)
-			sockets[i] = socket
-		}
-	})
-
-	AfterEach(func() {
-		for i, _ := range testSockets {
-			sockets[i].Close(logger)
-		}
-	})
+var _ = Describe("Sockets", func() {
 
 	Describe("Testing the Socket interface", func() {
 		It("should contain the required functions", func() {
-			for _, ts := range testSockets {
-				socket := CreateSocket(ts.socketType, ts.socketAddr)
-				_, ok := socket.(interface {
+			for i, _ := range testSockets {
+				_, ok := sockets[i].(interface {
 					Listen(parseChannel chan string, logger Logger)
 					Close(logger Logger)
 					GetAddr() string
@@ -94,11 +94,6 @@ var _ = Describe("Sockets", func() {
 			}
 		})
 
-		It("should be able to block until timeout", func() {
-			socket := CreateSocket(SocketTypeTcp, "127.0.0.1:0")
-			BlockForSocket(socket, time.Microsecond)
-		})
-
 		It("should panic if it has a bad address", func() {
 			for _, ts := range testSockets {
 				socket := CreateSocket(ts.socketType, "")
@@ -112,11 +107,12 @@ var _ = Describe("Sockets", func() {
 			runtime := b.Time("runtime", func() {
 				for i, ts := range testSockets {
 					sendSocketMessage(ts.socketDesc, sockets[i], ts.socketMessage)
+					<-parseChannel
 				}
 			})
 
 			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.5), "it should receive metrics quickly.")
-		}, 100)
+		}, 1000)
 
 	})
 })
