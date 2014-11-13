@@ -23,16 +23,23 @@ import (
 	"time"
 )
 
+const (
+	// ConnPoolTypeTcp is an enum describing a TCP connection pool.
+	ConnPoolTypeTcp = iota
+	// ConnPoolTypeUnix is an enum describing a Unix Socket connection pool.
+	ConnPoolTypeUnix
+)
+
 // ConnectionPool maintains a channel of connections to a remote host.
 type ConnectionPool struct {
 	// Size indicates the number of connections to keep open.
 	Size int
 	// Connections is the channel to push new/reused connections onto.
 	Connections chan net.Conn
-	// Host is the remote connection hostname to connect to.
-	Host string
-	// Port is the remote connection port to connect to.
-	Port int
+	// Addr is the string representing the address of the socket.
+	Addr string
+	// Type is the type of connection the pool will make.
+	Type int
 	// Timeout is the amount of time to wait for a connection.
 	Timeout time.Duration
 	// ErrorCount tracks the number of connection errors that have occured.
@@ -40,11 +47,11 @@ type ConnectionPool struct {
 }
 
 // CreateConnectionPool creates instances of ConnectionPool.
-func CreateConnectionPool(size int, host string, port int, timeout time.Duration, logger Logger) (*ConnectionPool, error) {
+func CreateConnectionPool(size int, addr string, connType int, timeout time.Duration, logger Logger) (*ConnectionPool, error) {
 	var pool = new(ConnectionPool)
 	pool.Size = size
-	pool.Host = host
-	pool.Port = port
+	pool.Addr = addr
+	pool.Type = connType
 	pool.Timeout = timeout
 	pool.ErrorCount = 0
 	pool.Connections = make(chan net.Conn, size)
@@ -69,9 +76,19 @@ func CreateConnectionPool(size int, host string, port int, timeout time.Duration
 func (pool *ConnectionPool) CreateConnection(logger Logger) (bool, error) {
 
 	if len(pool.Connections) < pool.Size {
-		logger.Info.Printf("Connecting to %s on port %d", pool.Host, pool.Port)
+		logger.Info.Printf("Connecting to %s", pool.Addr)
 		// Establish a new connection and set the timeout accordingly.
-		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", pool.Host, pool.Port))
+		var connType string
+		switch pool.Type {
+		case ConnPoolTypeTcp:
+			connType = "tcp"
+		case ConnPoolTypeUnix:
+			connType = "unix"
+		default:
+			err := errors.New("Unable to create a connection of the specified type.")
+			return false, err
+		}
+		conn, err := net.Dial(connType, pool.Addr)
 		if err != nil {
 			pool.ErrorCount++
 			logger.Error.Println("Connection Error.", err)
