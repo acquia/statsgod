@@ -79,6 +79,14 @@ var _ = Describe("Relay", func() {
 				backendRelay.Relay(*metricOne, logger)
 				backendRelay.Relay(*metricTwo, logger)
 				backendRelay.Relay(*metricThree, logger)
+
+				// Test a broken relay.
+				StopTemporaryListener()
+
+				Expect(func() { backendRelay.Relay(*metricOne, logger) }).Should(Panic())
+
+				// Restart the broken relay to shutdown properly.
+				tmpPort = StartTemporaryListener()
 			})
 		})
 
