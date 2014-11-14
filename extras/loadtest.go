@@ -175,10 +175,10 @@ func generateMetricNames(numMetrics int, store []Metric) []Metric {
 		newMetricName, _ := randutil.String(20, randutil.Alphabet)
 		newMetricNS := fmt.Sprintf("statsgod.test.%s", newMetricName)
 		newMetricCT := 1
-		if *connType > 0 && *connType < 5 {
+		if *connType > 0 && *connType < 6 {
 			newMetricCT = *connType
 		} else {
-			newMetricCT, _ = randutil.IntRange(1, 5)
+			newMetricCT, _ = randutil.IntRange(1, 6)
 		}
 
 		metricType := metricTypes[r.Intn(len(metricTypes))]
