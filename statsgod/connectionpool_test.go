@@ -17,6 +17,7 @@
 package statsgod_test
 
 import (
+	"fmt"
 	. "github.com/acquia/statsgod/statsgod"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -40,8 +41,7 @@ var _ = Describe("Connection Pool", func() {
 		It("should contain values", func() {
 			var pool = new(ConnectionPool)
 			Expect(pool.Size).ShouldNot(Equal(nil))
-			Expect(pool.Host).ShouldNot(Equal(nil))
-			Expect(pool.Port).ShouldNot(Equal(nil))
+			Expect(pool.Addr).ShouldNot(Equal(nil))
 			Expect(pool.Timeout).ShouldNot(Equal(nil))
 			Expect(pool.ErrorCount).ShouldNot(Equal(nil))
 
@@ -62,10 +62,10 @@ var _ = Describe("Connection Pool", func() {
 
 		Context("when we create a new connection pool", func() {
 			It("should contain values", func() {
-				pool, _ := CreateConnectionPool(maxConnections, host, tmpPort, timeout, logger)
+				addr := fmt.Sprintf("%s:%d", host, tmpPort)
+				pool, _ := CreateConnectionPool(maxConnections, addr, ConnPoolTypeTcp, timeout, logger)
 				Expect(pool.Size).Should(Equal(maxConnections))
-				Expect(pool.Host).Should(Equal(host))
-				Expect(pool.Port).Should(Equal(tmpPort))
+				Expect(pool.Addr).Should(Equal(addr))
 				Expect(pool.Timeout).Should(Equal(timeout))
 				Expect(pool.ErrorCount).Should(Equal(0))
 				Expect(cap(pool.Connections)).Should(Equal(maxConnections))
@@ -74,8 +74,9 @@ var _ = Describe("Connection Pool", func() {
 
 			// Test that we get an error if there is no listener.
 			It("should throw an error if there is no listener", func() {
+				addr := fmt.Sprintf("%s:%d", host, tmpPort)
 				StopTemporaryListener()
-				_, err := CreateConnectionPool(maxConnections, host, tmpPort, timeout, logger)
+				_, err := CreateConnectionPool(maxConnections, addr, ConnPoolTypeTcp, timeout, logger)
 				Expect(err).ShouldNot(Equal(nil))
 			})
 
@@ -83,7 +84,8 @@ var _ = Describe("Connection Pool", func() {
 
 		Context("when we use the connection pool", func() {
 			It("should contain the right number of connections", func() {
-				pool, _ := CreateConnectionPool(maxConnections, host, tmpPort, timeout, logger)
+				addr := fmt.Sprintf("%s:%d", host, tmpPort)
+				pool, _ := CreateConnectionPool(maxConnections, addr, ConnPoolTypeTcp, timeout, logger)
 
 				// Check that we established the correct number of connections.
 				Expect(len(pool.Connections)).Should(Equal(maxConnections))
@@ -117,7 +119,8 @@ var _ = Describe("Connection Pool", func() {
 			})
 
 			It("should throw an error if there is no listener.", func() {
-				pool, _ := CreateConnectionPool(maxConnections, host, tmpPort, timeout, logger)
+				addr := fmt.Sprintf("%s:%d", host, tmpPort)
+				pool, _ := CreateConnectionPool(maxConnections, addr, ConnPoolTypeTcp, timeout, logger)
 				StopTemporaryListener()
 
 				// Test that we get an error if there is no listener.
