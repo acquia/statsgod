@@ -111,7 +111,8 @@ func (pool *ConnectionPool) GetConnection(logger Logger) (net.Conn, error) {
 	case <-time.After(pool.Timeout):
 		logger.Error.Println("No connections available.")
 		err := errors.New("Connection timeout.")
-		return nil, err
+		nilConn := NilConn{}
+		return nilConn, err
 	}
 }
 

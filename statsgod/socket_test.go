@@ -23,20 +23,21 @@ import (
 	. "github.com/onsi/gomega"
 	"io/ioutil"
 	"net"
+	"strings"
 	"time"
 )
 
 // Table for running the socket tests.
 var testSockets = []struct {
-	socketType    int
-	socketDesc    string
-	socketAddr    string
-	badAddr       string
-	socketMessage string
+	socketType     int
+	socketDesc     string
+	socketAddr     string
+	badAddr        string
+	socketMessages []string
 }{
-	{SocketTypeTcp, "tcp", "127.0.0.1:0", "0.0.0.0", "test.tcp:4|c"},
-	{SocketTypeUdp, "udp", "127.0.0.1:0", "", "test.udp:4|c"},
-	{SocketTypeUnix, "unix", "/tmp/statsgod.sock", "/dev/null", "test.unix:4|c"},
+	{SocketTypeTcp, "tcp", "127.0.0.1:0", "0.0.0.0", []string{"test.tcp:4|c", "test.tcp:2|c\ntest.tcp:1|c"}},
+	{SocketTypeUdp, "udp", "127.0.0.1:0", "", []string{"test.udp:4|c", "test.udp:2|c"}},
+	{SocketTypeUnix, "unix", "/tmp/statsgod.sock", "/dev/null", []string{"test.unix:4|c", "test.unix:2|c\ntest.unix:1|c"}},
 }
 
 var sockets = make([]Socket, 3)
@@ -83,14 +84,22 @@ var _ = Describe("Sockets", func() {
 	Describe("Testing the Socket functionality", func() {
 		It("should be able to recieve messages", func() {
 			for i, ts := range testSockets {
-				sendSocketMessage(ts.socketDesc, sockets[i], ts.socketMessage)
-				message := ""
-				select {
-				case message = <-parseChannel:
-				case <-time.After(5 * time.Second):
-					message = ""
+				for _, sm := range ts.socketMessages {
+					sendSocketMessage(ts.socketDesc, sockets[i], sm)
 				}
-				Expect(message).Should(Equal(ts.socketMessage))
+
+				for _, sm := range ts.socketMessages {
+					receivedMessages := strings.Split(sm, "\n")
+					for _, rm := range receivedMessages {
+						message := ""
+						select {
+						case message = <-parseChannel:
+						case <-time.After(5 * time.Second):
+							message = ""
+						}
+						Expect(message).Should(Equal(rm))
+					}
+				}
 			}
 		})
 
@@ -106,8 +115,10 @@ var _ = Describe("Sockets", func() {
 		Measure("it should receive metrics quickly.", func(b Benchmarker) {
 			runtime := b.Time("runtime", func() {
 				for i, ts := range testSockets {
-					sendSocketMessage(ts.socketDesc, sockets[i], ts.socketMessage)
-					<-parseChannel
+					for _, sm := range ts.socketMessages {
+						sendSocketMessage(ts.socketDesc, sockets[i], sm)
+						<-parseChannel
+					}
 				}
 			})
 
