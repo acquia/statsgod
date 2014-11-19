@@ -17,6 +17,7 @@
 package statsgod_test
 
 import (
+	"fmt"
 	. "github.com/acquia/statsgod/statsgod"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -70,7 +71,7 @@ var _ = Describe("Relay", func() {
 
 				// Test the Relay() function.
 				logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
-				pool, _ := CreateConnectionPool(1, "127.0.0.1", tmpPort, 10*time.Second, logger)
+				pool, _ := CreateConnectionPool(1, fmt.Sprintf("127.0.0.1:%d", tmpPort), ConnPoolTypeTcp, 10*time.Second, logger)
 				backendRelay.ConnectionPool = pool
 				metricOne, _ := ParseMetricString("test.one:3|c")
 				metricTwo, _ := ParseMetricString("test.two:3|ms")
