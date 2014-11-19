@@ -46,3 +46,4 @@ debug:
     verbose: false # Increases the logging output.
     receipt: false # Logs a message with the parsed metric.
     profile: false # Profile the program with runtime/pprof.
+    relay: false   # Relay internal runtime information as metrics.

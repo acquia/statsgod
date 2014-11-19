@@ -27,6 +27,8 @@ import (
 	"time"
 )
 
+var socketBenchmarkTimeLimit = 0.75
+
 // Table for running the socket tests.
 var testSockets = []struct {
 	socketType     int
@@ -122,7 +124,7 @@ var _ = Describe("Sockets", func() {
 				}
 			})
 
-			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.5), "it should receive metrics quickly.")
+			Expect(runtime.Seconds()).Should(BeNumerically("<", socketBenchmarkTimeLimit), "it should receive metrics quickly.")
 		}, 1000)
 
 	})

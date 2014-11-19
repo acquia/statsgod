@@ -50,6 +50,7 @@ var _ = Describe("Config", func() {
 				Expect(config.Debug.Verbose).ShouldNot(Equal(nil))
 				Expect(config.Debug.Receipt).ShouldNot(Equal(nil))
 				Expect(config.Debug.Profile).ShouldNot(Equal(nil))
+				Expect(config.Debug.Relay).ShouldNot(Equal(nil))
 			})
 		})
 
@@ -73,6 +74,7 @@ var _ = Describe("Config", func() {
 				Expect(yaml.Debug.Verbose).Should(Equal(config.Debug.Verbose))
 				Expect(yaml.Debug.Receipt).Should(Equal(config.Debug.Receipt))
 				Expect(yaml.Debug.Profile).Should(Equal(config.Debug.Profile))
+				Expect(yaml.Debug.Relay).Should(Equal(config.Debug.Relay))
 
 			})
 		})
