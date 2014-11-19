@@ -35,7 +35,7 @@ const (
 
 // MetricRelay defines the interface for a back end implementation.
 type MetricRelay interface {
-	Relay(metric Metric, logger Logger)
+	Relay(metric Metric, logger Logger) bool
 }
 
 // CreateRelay is a factory for instantiating remote relays.
@@ -57,7 +57,7 @@ type CarbonRelay struct {
 }
 
 // Relay implements MetricRelay::Relay().
-func (c CarbonRelay) Relay(metric Metric, logger Logger) {
+func (c CarbonRelay) Relay(metric Metric, logger Logger) bool {
 	quantile := float64(c.Percentile) / float64(100)
 	ProcessMetric(&metric, c.FlushInterval, quantile, logger)
 	// @todo: are we ever setting flush time?
@@ -104,11 +104,11 @@ func (c CarbonRelay) Relay(metric Metric, logger Logger) {
 		gkey = fmt.Sprintf("stats.timers.%s.sum_%d", metric.Key, c.Percentile)
 		sendCarbonMetric(gkey, metric.SumInThreshold, stringTime, true, c, logger)
 	}
-
+	return true
 }
 
 // sendCarbonMetric formats a message and a value and time and sends to Graphite.
-func sendCarbonMetric(key string, v float64, t string, retry bool, relay CarbonRelay, logger Logger) {
+func sendCarbonMetric(key string, v float64, t string, retry bool, relay CarbonRelay, logger Logger) bool {
 	var releaseErr error
 	dataSent := false
 
@@ -145,8 +145,10 @@ func sendCarbonMetric(key string, v float64, t string, retry bool, relay CarbonR
 	// If data was not sent, likely a socket timeout, we'll retry one time.
 	if !dataSent && retry {
 		logger.Error.Printf("Metric not sent, retrying %v", payload)
-		sendCarbonMetric(key, v, t, false, relay, logger)
+		dataSent = sendCarbonMetric(key, v, t, false, relay, logger)
 	}
+
+	return dataSent
 }
 
 // MockRelay implements MetricRelay.
@@ -156,8 +158,9 @@ type MockRelay struct {
 }
 
 // Relay implements MetricRelay::Relay().
-func (c MockRelay) Relay(metric Metric, logger Logger) {
+func (c MockRelay) Relay(metric Metric, logger Logger) bool {
 	quantile := float64(c.Percentile) / float64(100)
 	ProcessMetric(&metric, c.FlushInterval, quantile, logger)
 	logger.Trace.Printf(fmt.Sprintf("Mock flush: %v", metric))
+	return true
 }
