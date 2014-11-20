@@ -32,6 +32,49 @@ All runtime options are specified in a YAML file. e.g.
 
 See config.yml for an example with all default/configurable values.
 
+## Stats Types
+Statsgod provides support for the following metric types:
+
+1. Counters - these are cumulative values that calculate the sum of all metrics sent. A rate is also calculated to determine how many values were sent during the flush interval:
+
+		my.counter:1|c
+		my.counter:1|c
+		my.counter:1|c
+		# flush produces a count and a rate:
+		[stats prefix].my.counter [timestamp] 3
+		[rate prefix].my.counter [timestamp] [3/(duration of flush interval in seconds)]
+
+2. Gauges - these are a "last in" measurement which discards all previously sent values:
+
+		my.gauge:1|g
+		my.gauge:2|g
+		my.gauge:3|g
+		# flush only sends the last value:
+		[gauge prefix].my.gauge [timestamp] 3
+
+3. Timers - these are timed values measured in milliseconds. Statsgod provides several calculated values based on the sent metrics:
+
+		my.timer:100|ms
+		my.timer:200|ms
+		my.timer:300|ms
+		# flush produces several calculated fields:
+		[timer prefix].my.timer.mean_value [timestamp] [mean]
+		[timer prefix].my.timer.median_value [timestamp] [median]
+		[timer prefix].my.timer.min_value [timestamp] [min]
+		[timer prefix].my.timer.max_value [timestamp] [max]
+		[timer prefix].my.timer.mean_90 [timestamp] [mean in 90th percentile]
+		[timer prefix].my.timer.upper_90 [timestamp] [upper in 90th percentile]
+		[timer prefix].my.timer.sum_90 [timestamp] [sum in 90th percentile]
+
+4. Sets - these track the number of unique values sent during a flush interval:
+
+		my.unique:1|s
+		my.unique:2|s
+		my.unique:2|s
+		my.unique:1|s
+		# flush produces a single value counting the unique metrics sent:
+		[set prefix].my.unique [timestamp] 2
+
 ## Development
 To download all dependencies and compile statsgod
 

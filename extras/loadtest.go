@@ -43,7 +43,7 @@ var logSent = flag.Bool("logSent", false, "Log each metric sent.")
 // Metric is our main data type.
 type Metric struct {
 	key            string // Name of the metric.
-	metricType     string // What type of metric is it (gauge, counter, timer)
+	metricType     string // What type of metric is it (gauge, counter, set, timer)
 	metricValue    int    // The value of the metric to send.
 	connectionType int    // Whether we are connecting TCP, UDP or Unix.
 }
@@ -166,6 +166,7 @@ func generateMetricNames(numMetrics int, store []Metric) []Metric {
 		"c",
 		"g",
 		"ms",
+		"s",
 	}
 
 	rand.Seed(time.Now().UnixNano())
@@ -206,6 +207,8 @@ func sendMetricToStats(metric Metric) {
 		metricValue = rand.Intn(100)
 	case "ms":
 		metricValue = rand.Intn(1000)
+	case "s":
+		metricValue = rand.Intn(100)
 	}
 	stringValue := fmt.Sprintf("%s:%d|%s", metric.key, metricValue, metric.metricType)
 	// Send to the designated connection

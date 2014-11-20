@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"io/ioutil"
+	"math"
 	"time"
 )
 
@@ -206,6 +207,18 @@ var _ = Describe("Metrics", func() {
 				Expect(metricTimer.MaxInThreshold).Should(Equal(float64(144)))
 				Expect(metricTimer.SumInThreshold).Should(Equal(float64(645)))
 				Expect(metricTimer.LastValue).Should(Equal(float64(169)))
+			})
+
+			// Test the set-metric-type unique values.
+			for i := 1; i < 21; i++ {
+				set := math.Floor(float64(i) / float64(2))
+				metricSet, _ := ParseMetricString(fmt.Sprintf("test.set:%f|s", set))
+				AggregateMetric(metrics, *metricSet)
+			}
+			It("should calculate set unique values properly", func() {
+				metricSet := metrics["test.set"]
+				ProcessMetric(&metricSet, time.Second*10, float64(0.9), logger)
+				Expect(metricSet.LastValue).Should(Equal(float64(11)))
 			})
 
 			Measure("it should process metrics quickly.", func(b Benchmarker) {

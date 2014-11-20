@@ -87,7 +87,7 @@ go run extras/log_compare.go -in=/tmp/statsgod.input -out=/tmp/statsgod.output
 		metricType = ""
 
 		if i < inputLen {
-			inputR, _ := regexp.Match("^[^\\s]+\\:[0-9\\.]+\\|(c|g|ms).*$", []byte(inputLines[i]))
+			inputR, _ := regexp.Match("^[^\\s]+\\:[0-9\\.]+\\|(c|g|s|ms).*$", []byte(inputLines[i]))
 			if inputR {
 				inputStringsLen++
 				if inputStrings[inputLines[i]] == 0 {
@@ -106,6 +106,8 @@ go run extras/log_compare.go -in=/tmp/statsgod.input -out=/tmp/statsgod.output
 					metricType = "c"
 				case "gauge":
 					metricType = "g"
+				case "set":
+					metricType = "s"
 				case "timer":
 					metricType = "ms"
 				}
