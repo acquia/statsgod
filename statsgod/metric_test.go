@@ -25,6 +25,8 @@ import (
 	"time"
 )
 
+var metricBenchmarkTimeLimit = 0.25
+
 // Creates a Metric struct with default values.
 func getDefaultMetricStructure() Metric {
 	var metric = new(Metric)
@@ -82,10 +84,24 @@ var _ = Describe("Metrics", func() {
 					Expect(metric).ShouldNot(Equal(nil))
 				})
 
-				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.25), "it should be able to parse metric strings quickly.")
+				Expect(runtime.Seconds()).Should(BeNumerically("<", metricBenchmarkTimeLimit), "it should be able to parse metric strings quickly.")
 
 			}, 100000)
 
+		})
+
+		Context("when we create simple metrics", func() {
+			It("should create a metric with the correct values", func() {
+				key := "test"
+				value := float64(123)
+				metricType := "gauge"
+				metric := CreateSimpleMetric(key, value, metricType)
+				Expect(metric.Key).Should(Equal(key))
+				Expect(metric.MetricType).Should(Equal(metricType))
+				Expect(metric.LastValue).Should(Equal(value))
+				Expect(metric.AllValues[0]).Should(Equal(value))
+				Expect(metric.TotalHits).Should(Equal(1))
+			})
 		})
 
 		Context("when we aggregate metrics", func() {
@@ -139,7 +155,7 @@ var _ = Describe("Metrics", func() {
 					AggregateMetric(metrics, *metric)
 				})
 
-				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.25), "it should aggregate metrics quickly.")
+				Expect(runtime.Seconds()).Should(BeNumerically("<", metricBenchmarkTimeLimit), "it should aggregate metrics quickly.")
 			}, 100000)
 		})
 
@@ -198,7 +214,7 @@ var _ = Describe("Metrics", func() {
 					ProcessMetric(&metric, time.Second*10, float64(0.8), logger)
 				})
 
-				Expect(runtime.Seconds()).Should(BeNumerically("<", 0.25), "it should process metrics quickly.")
+				Expect(runtime.Seconds()).Should(BeNumerically("<", metricBenchmarkTimeLimit), "it should process metrics quickly.")
 			}, 100000)
 
 		})
