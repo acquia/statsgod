@@ -22,12 +22,15 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"io/ioutil"
+	"math/rand"
 	"net"
 	"strings"
 	"time"
 )
 
 var socketBenchmarkTimeLimit = 0.75
+
+var longMetricString = generateMetricString(100)
 
 // Table for running the socket tests.
 var testSockets = []struct {
@@ -37,9 +40,9 @@ var testSockets = []struct {
 	badAddr        string
 	socketMessages []string
 }{
-	{SocketTypeTcp, "tcp", "127.0.0.1:0", "0.0.0.0", []string{"test.tcp:4|c", "test.tcp:2|c\ntest.tcp:1|c"}},
+	{SocketTypeTcp, "tcp", "127.0.0.1:0", "0.0.0.0", []string{"test.tcp:4|c", longMetricString}},
 	{SocketTypeUdp, "udp", "127.0.0.1:0", "", []string{"test.udp:4|c", "test.udp:2|c"}},
-	{SocketTypeUnix, "unix", "/tmp/statsgod.sock", "/dev/null", []string{"test.unix:4|c", "test.unix:2|c\ntest.unix:1|c"}},
+	{SocketTypeUnix, "unix", "/tmp/statsgod.sock", "/dev/null", []string{"test.unix:4|c", longMetricString}},
 }
 
 var sockets = make([]Socket, 3)
@@ -99,9 +102,23 @@ var _ = Describe("Sockets", func() {
 						case <-time.After(5 * time.Second):
 							message = ""
 						}
+						GinkgoWriter.Write([]byte(fmt.Sprintf("type: %s - value: %s|%s\n", ts.socketDesc, rm, message)))
 						Expect(message).Should(Equal(rm))
 					}
 				}
+			}
+		})
+
+		It("should ignore empty values", func() {
+			for i, ts := range testSockets {
+				sendSocketMessage(ts.socketDesc, sockets[i], "")
+				message := ""
+				select {
+				case message = <-parseChannel:
+				case <-time.After(time.Microsecond):
+					message = ""
+				}
+				Expect(message).Should(Equal(""))
 			}
 		})
 
@@ -110,6 +127,13 @@ var _ = Describe("Sockets", func() {
 				socket := CreateSocket(ts.socketType, "")
 				Expect(func() { socket.Listen(parseChannel, logger) }).Should(Panic())
 				socket = CreateSocket(ts.socketType, ts.badAddr)
+				Expect(func() { socket.Listen(parseChannel, logger) }).Should(Panic())
+			}
+		})
+
+		It("should panic if it is already listening on an address.", func() {
+			for i, ts := range testSockets {
+				socket := CreateSocket(ts.socketType, sockets[i].GetAddr())
 				Expect(func() { socket.Listen(parseChannel, logger) }).Should(Panic())
 			}
 		})
@@ -138,4 +162,15 @@ func sendSocketMessage(socketType string, socket Socket, message string) {
 	}
 	defer conn.Close()
 	_, err = conn.Write([]byte(message))
+}
+
+// generateMetricString generates a string that can be used to send multiple metrics.
+func generateMetricString(count int) (metricString string) {
+	rand.Seed(time.Now().UnixNano())
+
+	for i := 0; i < count; i++ {
+		metricString += fmt.Sprintf("test.long:%d|c\n", rand.Intn(100))
+	}
+
+	return
 }
