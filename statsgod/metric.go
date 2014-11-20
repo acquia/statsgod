@@ -54,6 +54,18 @@ type Metric struct {
 	LastFlushed     int        // When did we last flush this out?
 }
 
+// CreateSimpleMetric is a helper to quickly create a metric with the minimum information.
+func CreateSimpleMetric(key string, value float64, metricType string) *Metric {
+	metric := new(Metric)
+	metric.Key = key
+	metric.MetricType = metricType
+	metric.LastValue = value
+	metric.AllValues = append(metric.AllValues, metric.LastValue)
+	metric.TotalHits = 1
+
+	return metric
+}
+
 // ParseMetricString parses a metric string, and if it is properly constructed,
 // create a Metric structure. Expects the format [namespace]:[value]|[type]
 func ParseMetricString(metricString string) (*Metric, error) {

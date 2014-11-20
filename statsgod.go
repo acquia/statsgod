@@ -39,6 +39,8 @@ import (
 	"io/ioutil"
 	"os"
 	"os/signal"
+	"regexp"
+	"runtime"
 	"runtime/pprof"
 	"syscall"
 	"time"
@@ -51,6 +53,8 @@ const (
 	AverageMemoryPerRequest = 10 << 10 // 10 KB
 	// MaxReqs is how many requests.
 	MaxReqs = AvailableMemory / AverageMemoryPerRequest
+	// Megabyte represents the number of bytes in a megabyte.
+	Megabyte = 1048576
 )
 
 // The channel containing received metric strings.
@@ -68,6 +72,9 @@ var profile = flag.Bool("profile", false, "Profiling mode")
 
 var backendRelay statsgod.MetricRelay
 
+// Track the host of this program.
+var hostname string
+
 func main() {
 	// Load command line options.
 	flag.Parse()
@@ -76,6 +83,15 @@ func main() {
 
 	// Load the YAML config.
 	var config, _ = statsgod.LoadConfig(*configFile)
+
+	var hostnameErr error
+	hostname, hostnameErr = os.Hostname()
+	if hostnameErr != nil {
+		hostname = "unknown"
+	} else {
+		re := regexp.MustCompile("[^a-zA-Z0-9]")
+		hostname = re.ReplaceAllString(hostname, "-")
+	}
 
 	if *profile || config.Debug.Profile {
 		// Allow the flag to override the config.
@@ -194,6 +210,11 @@ func flushMetrics(logger statsgod.Logger, config statsgod.ConfigValues) {
 	tick := time.Tick(config.Relay.Flush)
 	logger.Info.Printf("Flushing every %v", config.Relay.Flush)
 
+	// Track the flush cycle metrics.
+	var flushStart time.Time
+	var flushStop time.Time
+	var flushCount int
+
 	// Internal storage.
 	metrics := make(map[string]statsgod.Metric)
 
@@ -217,17 +238,74 @@ func flushMetrics(logger statsgod.Logger, config statsgod.ConfigValues) {
 		select {
 		case <-tick:
 			logger.Trace.Println("Tick...")
-			for key, metric := range metrics {
-				metric.FlushTime = int(time.Now().Unix())
-				backendRelay.Relay(metric, logger)
-				// @todo: should we delete gauges?
-				delete(metrics, key)
-			}
+
+			// Prepare the runtime metrics.
+			prepareRuntimeMetrics(metrics, config)
+
+			// Time and flush the received metrics.
+			flushCount = len(metrics)
+			flushStart = time.Now()
+			flushAllMetrics(metrics, logger)
+			flushStop = time.Now()
+
+			// Prepare and flush the internal metrics.
+			prepareFlushMetrics(metrics, config, flushStart, flushStop, flushCount)
+			flushAllMetrics(metrics, logger)
 		default:
 			// Flush interval hasn't passed yet.
 		}
 	}
+}
 
+// flushAllMetrics is a helper to iterate over a Metric map and flush all to the relay.
+func flushAllMetrics(metrics map[string]statsgod.Metric, logger statsgod.Logger) {
+	for key, metric := range metrics {
+		metric.FlushTime = int(time.Now().Unix())
+		backendRelay.Relay(metric, logger)
+		delete(metrics, key)
+	}
+}
+
+// prepareRuntimeMetrics creates key runtime metrics to monitor the health of the system.
+func prepareRuntimeMetrics(metrics map[string]statsgod.Metric, config statsgod.ConfigValues) {
+	if config.Debug.Relay {
+		memStats := &runtime.MemStats{}
+		runtime.ReadMemStats(memStats)
+
+		// Prepare a metric for the memory allocated.
+		heapAllocKey := fmt.Sprintf("statsgod.%s.runtime.memory.heapalloc", hostname)
+		heapAllocValue := float64(memStats.HeapAlloc) / float64(Megabyte)
+		heapAllocMetric := statsgod.CreateSimpleMetric(heapAllocKey, heapAllocValue, "gauge")
+		metrics[heapAllocMetric.Key] = *heapAllocMetric
+
+		// Prepare a metric for the memory allocated that is still in use.
+		allocKey := fmt.Sprintf("statsgod.%s.runtime.memory.alloc", hostname)
+		allocValue := float64(memStats.Alloc) / float64(Megabyte)
+		allocMetric := statsgod.CreateSimpleMetric(allocKey, allocValue, "gauge")
+		metrics[allocMetric.Key] = *allocMetric
+
+		// Prepare a metric for the memory obtained from the system.
+		sysKey := fmt.Sprintf("statsgod.%s.runtime.memory.sys", hostname)
+		sysValue := float64(memStats.Sys) / float64(Megabyte)
+		sysMetric := statsgod.CreateSimpleMetric(sysKey, sysValue, "gauge")
+		metrics[sysMetric.Key] = *sysMetric
+	}
+}
+
+// prepareFlushMetrics creates metrics that represent the speed and size of the flushes.
+func prepareFlushMetrics(metrics map[string]statsgod.Metric, config statsgod.ConfigValues, flushStart time.Time, flushStop time.Time, flushCount int) {
+	if config.Debug.Relay {
+		// Prepare the duration metric.
+		durationKey := fmt.Sprintf("statsgod.%s.flush.duration", hostname)
+		durationValue := float64(int64(flushStop.Sub(flushStart).Nanoseconds()) / int64(time.Millisecond))
+		durationMetric := statsgod.CreateSimpleMetric(durationKey, durationValue, "timer")
+		metrics[durationMetric.Key] = *durationMetric
+
+		// Prepare the counter metric.
+		countKey := fmt.Sprintf("statsgod.%s.flush.count", hostname)
+		countMetric := statsgod.CreateSimpleMetric(countKey, float64(flushCount), "gauge")
+		metrics[countMetric.Key] = *countMetric
+	}
 }
 
 func checkError(err error, info string, panicOnError bool) {

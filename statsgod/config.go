@@ -65,6 +65,7 @@ type ConfigValues struct {
 		Verbose bool
 		Receipt bool
 		Profile bool
+		Relay   bool
 	}
 }
 
@@ -88,6 +89,7 @@ func LoadConfig(filePath string) (config ConfigValues, err error) {
 	config.Debug.Verbose = false
 	config.Debug.Receipt = false
 	config.Debug.Profile = false
+	config.Debug.Relay = false
 
 	// Attempt to read in the file.
 	if filePath != "" {
