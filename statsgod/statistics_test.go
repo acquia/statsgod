@@ -48,6 +48,14 @@ var _ = Describe("Statistics", func() {
 	})
 
 	Describe("Testing the statistics calculations", func() {
+		Context("when the UniqueCount is applied", func() {
+			values := ValueSlice{4, 5, 2, 3, 2, 4, 4, 5, 6, 7, 8, 9, 0, 4}
+			count := values.UniqueCount()
+			It("should find the correct number of unique values", func() {
+				Expect(count).Should(Equal(9))
+			})
+		})
+
 		Context("when the Minmax is applied", func() {
 			values := ValueSlice{5, math.NaN(), 2, 3, 4, 1}
 			min, max, err := values.Minmax()
