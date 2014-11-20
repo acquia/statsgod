@@ -20,6 +20,7 @@ package statsgod
 import (
 	"errors"
 	"math"
+	"sort"
 )
 
 // ValueSlice provides a storage for float64 values.
@@ -36,6 +37,23 @@ func (values ValueSlice) Less(i, j int) bool { return values[i] < values[j] }
 
 // Swap is used for the sorting interface.
 func (values ValueSlice) Swap(i, j int) { values[i], values[j] = values[j], values[i] }
+
+// UniqueCount provides the number of unique values sent during this period.
+func (values ValueSlice) UniqueCount() int {
+	sort.Sort(values)
+	count := 0
+	var p float64
+	for i, v := range values {
+		if i > 0 && p != v {
+			count++
+		} else if i == 0 {
+			count++
+		}
+		p = v
+	}
+
+	return count
+}
 
 // Minmax provides the minimum and maximum values for a ValueSlice structure.
 func (values ValueSlice) Minmax() (min float64, max float64, err error) {

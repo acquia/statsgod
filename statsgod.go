@@ -27,6 +27,7 @@
  * Gauge   (g):  constant metric, value persists until the server is restarted.
  * Counter (c):  increment/decrement a given namespace.
  * Timer   (ms): a timer that calculates average, 90% percentile, etc.
+ * Set     (s): a count of unique values sent during a flush period.
  *
  * An example data string would be "user.login.success:123|c"
  */
