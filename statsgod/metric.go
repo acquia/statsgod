@@ -128,6 +128,8 @@ func AggregateMetric(metrics map[string]Metric, metric Metric) {
 			existingMetric.LastValue += metric.LastValue
 		case metric.MetricType == "timer":
 			existingMetric.LastValue = metric.LastValue
+		case metric.MetricType == "set":
+			existingMetric.LastValue = metric.LastValue
 		}
 
 		metrics[metric.Key] = existingMetric
@@ -144,6 +146,8 @@ func ProcessMetric(metric *Metric, flushDuration time.Duration, quantile float64
 	switch metric.MetricType {
 	case "counter":
 		metric.ValuesPerSecond = float64(len(metric.AllValues)) / float64(flushInterval)
+	case "set":
+		metric.LastValue = float64(metric.AllValues.UniqueCount())
 	case "timer":
 		metric.MinValue, metric.MaxValue, _ = metric.AllValues.Minmax()
 
@@ -177,6 +181,8 @@ func shortTypeToLong(short string) (string, error) {
 		return "gauge", nil
 	case "ms" == short:
 		return "timer", nil
+	case "s" == short:
+		return "set", nil
 	}
 	return "unknown", errors.New("unknown metric type")
 }
