@@ -25,8 +25,26 @@ Statsgod is an experimental Go implementation (or deviation) of Etsy's statsd se
 		echo "the_magic_number:3|g" | nc -4u -w0 localhost 8126 # UDP
 		echo "the_magic_number:3|g" | nc -U /tmp/statsgod.sock # Unix Socket
 
+### Sending Metrics
+Client code can send metrics via any one of three sockets which listen concurrently:
+
+1. TCP
+	- Allows multiple metrics to be sent over a connection, separated by a newline character.
+	- Connection will remain open until closed by the client.
+	- Host and port are configurable
+
+2. UDP
+	- Allows multiple metrics to be sent over a connection, separated by a newline character. Note, you should be careful to not exceed the maximum packet size (default 1024 bytes).
+	- Max packet size is configurable.
+	- Host and port are configurable
+
+3. Unix Domain Socket
+	- Allows multiple metrics to be sent over a connection, separated by a newline character.
+	- Connection will remain open until closed by the client.
+	- Sock file is configurable
+
 ## Configuration
-All runtime options are specified in a YAML file. e.g.
+All runtime options are specified in a YAML file. Please see example.config.yml for defaults. e.g.
 
 	go run statsgod.go -config=/etc/statsgod.yml
 

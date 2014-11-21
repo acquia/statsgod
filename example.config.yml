@@ -14,6 +14,7 @@ connection:
     udp:
         host: 127.0.0.1
         port: 8126
+        maxpacket: 1024
     unix:
         file: /var/run/statsgod.sock
 

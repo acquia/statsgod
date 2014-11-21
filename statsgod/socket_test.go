@@ -30,7 +30,9 @@ import (
 
 var socketBenchmarkTimeLimit = 0.75
 
-var longMetricString = generateMetricString(100)
+var shortMetricString = generateMetricString(2, "short")
+var mediumMetricString = generateMetricString(10, "medium")
+var longMetricString = generateMetricString(100, "long")
 
 // Table for running the socket tests.
 var testSockets = []struct {
@@ -40,19 +42,20 @@ var testSockets = []struct {
 	badAddr        string
 	socketMessages []string
 }{
-	{SocketTypeTcp, "tcp", "127.0.0.1:0", "0.0.0.0", []string{"test.tcp:4|c", longMetricString}},
-	{SocketTypeUdp, "udp", "127.0.0.1:0", "", []string{"test.udp:4|c", "test.udp:2|c"}},
-	{SocketTypeUnix, "unix", "/tmp/statsgod.sock", "/dev/null", []string{"test.unix:4|c", longMetricString}},
+	{SocketTypeTcp, "tcp", "127.0.0.1:0", "0.0.0.0", []string{"test.tcp:4|c", shortMetricString, mediumMetricString, longMetricString}},
+	{SocketTypeUdp, "udp", "127.0.0.1:0", "", []string{"test.udp:4|c", shortMetricString, mediumMetricString}},
+	{SocketTypeUnix, "unix", "/tmp/statsgod.sock", "/dev/null", []string{"test.unix:4|c", shortMetricString, mediumMetricString, longMetricString}},
 }
 
 var sockets = make([]Socket, 3)
 var parseChannel = make(chan string)
 var logger = *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
+var config, _ = LoadConfig("")
 
 var _ = BeforeSuite(func() {
 	for i, ts := range testSockets {
 		socket := CreateSocket(ts.socketType, ts.socketAddr)
-		go socket.Listen(parseChannel, logger)
+		go socket.Listen(parseChannel, logger, config)
 		BlockForSocket(socket, time.Second)
 		sockets[i] = socket
 	}
@@ -70,7 +73,7 @@ var _ = Describe("Sockets", func() {
 		It("should contain the required functions", func() {
 			for i, _ := range testSockets {
 				_, ok := sockets[i].(interface {
-					Listen(parseChannel chan string, logger Logger)
+					Listen(parseChannel chan string, logger Logger, config ConfigValues)
 					Close(logger Logger)
 					GetAddr() string
 					SocketIsActive() bool
@@ -87,13 +90,11 @@ var _ = Describe("Sockets", func() {
 	})
 
 	Describe("Testing the Socket functionality", func() {
-		It("should be able to recieve messages", func() {
+		It("should be able to receive messages", func() {
 			for i, ts := range testSockets {
 				for _, sm := range ts.socketMessages {
 					sendSocketMessage(ts.socketDesc, sockets[i], sm)
-				}
 
-				for _, sm := range ts.socketMessages {
 					receivedMessages := strings.Split(sm, "\n")
 					for _, rm := range receivedMessages {
 						message := ""
@@ -125,26 +126,24 @@ var _ = Describe("Sockets", func() {
 		It("should panic if it has a bad address", func() {
 			for _, ts := range testSockets {
 				socket := CreateSocket(ts.socketType, "")
-				Expect(func() { socket.Listen(parseChannel, logger) }).Should(Panic())
+				Expect(func() { socket.Listen(parseChannel, logger, config) }).Should(Panic())
 				socket = CreateSocket(ts.socketType, ts.badAddr)
-				Expect(func() { socket.Listen(parseChannel, logger) }).Should(Panic())
+				Expect(func() { socket.Listen(parseChannel, logger, config) }).Should(Panic())
 			}
 		})
 
 		It("should panic if it is already listening on an address.", func() {
 			for i, ts := range testSockets {
 				socket := CreateSocket(ts.socketType, sockets[i].GetAddr())
-				Expect(func() { socket.Listen(parseChannel, logger) }).Should(Panic())
+				Expect(func() { socket.Listen(parseChannel, logger, config) }).Should(Panic())
 			}
 		})
 
 		Measure("it should receive metrics quickly.", func(b Benchmarker) {
 			runtime := b.Time("runtime", func() {
 				for i, ts := range testSockets {
-					for _, sm := range ts.socketMessages {
-						sendSocketMessage(ts.socketDesc, sockets[i], sm)
-						<-parseChannel
-					}
+					sendSocketMessage(ts.socketDesc, sockets[i], ts.socketMessages[0])
+					<-parseChannel
 				}
 			})
 
@@ -165,12 +164,12 @@ func sendSocketMessage(socketType string, socket Socket, message string) {
 }
 
 // generateMetricString generates a string that can be used to send multiple metrics.
-func generateMetricString(count int) (metricString string) {
+func generateMetricString(count int, prefix string) (metricString string) {
 	rand.Seed(time.Now().UnixNano())
 
 	for i := 0; i < count; i++ {
-		metricString += fmt.Sprintf("test.long:%d|c\n", rand.Intn(100))
+		metricString += fmt.Sprintf("test.%s:%d|c\n", prefix, rand.Intn(100))
 	}
 
-	return
+	return strings.Trim(metricString, "\n")
 }

@@ -149,14 +149,14 @@ func main() {
 
 	tcpAddr := fmt.Sprintf("%s:%d", config.Connection.Tcp.Host, config.Connection.Tcp.Port)
 	socketTcp := statsgod.CreateSocket(statsgod.SocketTypeTcp, tcpAddr).(*statsgod.SocketTcp)
-	go socketTcp.Listen(parseChannel, logger)
+	go socketTcp.Listen(parseChannel, logger, config)
 
 	udpAddr := fmt.Sprintf("%s:%d", config.Connection.Udp.Host, config.Connection.Udp.Port)
 	socketUdp := statsgod.CreateSocket(statsgod.SocketTypeUdp, udpAddr).(*statsgod.SocketUdp)
-	go socketUdp.Listen(parseChannel, logger)
+	go socketUdp.Listen(parseChannel, logger, config)
 
 	socketUnix := statsgod.CreateSocket(statsgod.SocketTypeUnix, config.Connection.Unix.File).(*statsgod.SocketUnix)
-	go socketUnix.Listen(parseChannel, logger)
+	go socketUnix.Listen(parseChannel, logger, config)
 
 	// Signal handling. Any signal that should cause this program to stop needs to
 	// also do some cleanup before exiting.
