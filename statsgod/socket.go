@@ -37,7 +37,7 @@ const (
 
 // Socket is the interface for all of our socket types.
 type Socket interface {
-	Listen(parseChannel chan string, logger Logger)
+	Listen(parseChannel chan string, logger Logger, config ConfigValues)
 	Close(logger Logger)
 	GetAddr() string
 	SocketIsActive() bool
@@ -85,7 +85,7 @@ type SocketTcp struct {
 
 // Listen listens on a socket and populates a channel with received messages.
 // Conforms to Socket.Listen().
-func (l *SocketTcp) Listen(parseChannel chan string, logger Logger) {
+func (l *SocketTcp) Listen(parseChannel chan string, logger Logger, config ConfigValues) {
 	if l.Addr == "" {
 		panic("Could not establish a TCP socket. Address must be specified.")
 	}
@@ -130,7 +130,7 @@ type SocketUdp struct {
 
 // Listen listens on a socket and populates a channel with received messages.
 // Conforms to Socket.Listen().
-func (l *SocketUdp) Listen(parseChannel chan string, logger Logger) {
+func (l *SocketUdp) Listen(parseChannel chan string, logger Logger, config ConfigValues) {
 	if l.Addr == "" {
 		panic("Could not establish a UDP socket. Addr must be specified.")
 	}
@@ -143,7 +143,7 @@ func (l *SocketUdp) Listen(parseChannel chan string, logger Logger) {
 
 	logger.Info.Printf("UDP socket opened on %s", l.Addr)
 	for {
-		readInputUdp(*listener, parseChannel, logger)
+		readInputUdp(*listener, parseChannel, logger, config)
 	}
 }
 
@@ -171,7 +171,7 @@ type SocketUnix struct {
 
 // Listen listens on a socket and populates a channel with received messages.
 // Conforms to Socket.Listen().
-func (l *SocketUnix) Listen(parseChannel chan string, logger Logger) {
+func (l *SocketUnix) Listen(parseChannel chan string, logger Logger, config ConfigValues) {
 	if l.Addr == "" {
 		panic("Could not establish a Unix socket. No sock file specified.")
 	}
@@ -268,14 +268,17 @@ func readInput(conn net.Conn, parseChannel chan string, logger Logger) {
 }
 
 // readInputUdp parses the buffer for UDP sockets.
-func readInputUdp(conn net.UDPConn, parseChannel chan string, logger Logger) {
-	buf := make([]byte, 512)
+func readInputUdp(conn net.UDPConn, parseChannel chan string, logger Logger, config ConfigValues) {
+	buf := make([]byte, config.Connection.Udp.Maxpacket)
 	length, _, err := conn.ReadFromUDP(buf[0:])
 	if err != nil {
 		logger.Error.Println("Could not read stream.", err)
 		return
 	}
 	if length != 0 {
-		parseChannel <- string(buf[:length])
+		metrics := strings.Split(strings.TrimSpace(strings.Trim(string(buf), "\x00")), "\n")
+		for _, metric := range metrics {
+			parseChannel <- metric
+		}
 	}
 }
