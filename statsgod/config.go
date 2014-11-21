@@ -41,8 +41,9 @@ type ConfigValues struct {
 			Port int
 		}
 		Udp struct {
-			Host string
-			Port int
+			Host      string
+			Port      int
+			Maxpacket int
 		}
 		Unix struct {
 			File string
@@ -78,6 +79,7 @@ func LoadConfig(filePath string) (config ConfigValues, err error) {
 	config.Connection.Tcp.Port = 8125
 	config.Connection.Udp.Host = "127.0.0.1"
 	config.Connection.Udp.Port = 8126
+	config.Connection.Udp.Maxpacket = 1024
 	config.Connection.Unix.File = "/var/run/statsgod.sock"
 	config.Relay.Type = RelayTypeCarbon
 	config.Relay.Concurrency = 1
