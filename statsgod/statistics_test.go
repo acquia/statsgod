@@ -149,5 +149,13 @@ var _ = Describe("Statistics", func() {
 			}, 100000)
 
 		})
+
+		Context("when the sum is applied", func() {
+			values := ValueSlice{123, 234, 345, 456, 567, 678, 789, 890, 910, 1011}
+			It("should find the correct sum value", func() {
+				sum := values.Sum()
+				Expect(sum).Should(Equal(float64(6003.0)))
+			})
+		})
 	})
 })
