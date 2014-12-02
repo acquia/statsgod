@@ -102,13 +102,13 @@ go run extras/log_compare.go -in=/tmp/statsgod.input -out=/tmp/statsgod.output
 			outputR := outputRegex.FindAllStringSubmatch(outputLines[i], -1)
 			if len(outputR) > 0 && len(outputR[0]) == 4 {
 				switch outputR[0][2] {
-				case "counter":
+				case "0":
 					metricType = "c"
-				case "gauge":
+				case "1":
 					metricType = "g"
-				case "set":
+				case "2":
 					metricType = "s"
-				case "timer":
+				case "3":
 					metricType = "ms"
 				}
 				outputLine = fmt.Sprintf("%s:%s|%s", outputR[0][1], outputR[0][3], metricType)
