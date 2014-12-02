@@ -60,7 +60,7 @@ type ConfigValues struct {
 		Port int
 	}
 	Stats struct {
-		Percentile int
+		Percentile []int
 	}
 	Debug struct {
 		Verbose bool
@@ -87,7 +87,6 @@ func LoadConfig(filePath string) (config ConfigValues, err error) {
 	config.Relay.Flush = 10 * time.Second
 	config.Carbon.Host = "127.0.0.1"
 	config.Carbon.Port = 2003
-	config.Stats.Percentile = 80
 	config.Debug.Verbose = false
 	config.Debug.Receipt = false
 	config.Debug.Profile = false
@@ -101,6 +100,12 @@ func LoadConfig(filePath string) (config ConfigValues, err error) {
 		} else {
 			err = yaml.Unmarshal([]byte(contents), &config)
 		}
+	}
+
+	// The yaml parser will append array values, so to avoid duplicates we
+	// only add the default when there are none specified in the yaml.
+	if len(config.Stats.Percentile) == 0 {
+		config.Stats.Percentile = []int{80}
 	}
 
 	return

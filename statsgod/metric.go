@@ -35,23 +35,32 @@ const (
 	SeparatorValueType = "|"
 )
 
+// MetricQuantile tracks a specified quantile measurement.
+type MetricQuantile struct {
+	Quantile  int        // The specified percentile.
+	Boundary  float64    // The calculated quantile value.
+	AllValues ValueSlice // All of the values.
+	Mean      float64    // The mean value within the quantile.
+	Median    float64    // The median value within the quantile.
+	Max       float64    // The maxumum value within the quantile.
+	Sum       float64    // The sum value within the quantile.
+}
+
 // Metric is our main data type.
 type Metric struct {
-	Key             string     // Name of the metric.
-	MetricType      string     // What type of metric is it (gauge, counter, timer)
-	TotalHits       int        // Number of times it has been used.
-	LastValue       float64    // The last value stored.
-	ValuesPerSecond float64    // The number of values per second.
-	MinValue        float64    // The min value.
-	MaxValue        float64    // The max value.
-	MeanValue       float64    // The cumulative mean.
-	MedianValue     float64    // The cumulative median.
-	MeanInThreshold float64    // The mean average within the threshold.
-	MaxInThreshold  float64    // The max value within the threshold.
-	SumInThreshold  float64    // The total within the threshold
-	AllValues       ValueSlice // All of the values.
-	FlushTime       int        // What time are we sending Graphite?
-	LastFlushed     int        // When did we last flush this out?
+	Key             string           // Name of the metric.
+	MetricType      string           // What type of metric is it (gauge, counter, timer)
+	TotalHits       int              // Number of times it has been used.
+	LastValue       float64          // The last value stored.
+	ValuesPerSecond float64          // The number of values per second.
+	MinValue        float64          // The min value.
+	MaxValue        float64          // The max value.
+	MeanValue       float64          // The cumulative mean.
+	MedianValue     float64          // The cumulative median.
+	Quantiles       []MetricQuantile // A list of quantile calculations.
+	AllValues       ValueSlice       // All of the values.
+	FlushTime       int              // What time are we sending Graphite?
+	LastFlushed     int              // When did we last flush this out?
 }
 
 // CreateSimpleMetric is a helper to quickly create a metric with the minimum information.
@@ -139,7 +148,7 @@ func AggregateMetric(metrics map[string]Metric, metric Metric) {
 }
 
 // ProcessMetric will create additional calculations based on the type of metric.
-func ProcessMetric(metric *Metric, flushDuration time.Duration, quantile float64, logger Logger) {
+func ProcessMetric(metric *Metric, flushDuration time.Duration, quantiles []int, logger Logger) {
 	flushInterval := flushDuration / time.Second
 
 	sort.Sort(metric.AllValues)
@@ -151,20 +160,26 @@ func ProcessMetric(metric *Metric, flushDuration time.Duration, quantile float64
 	case "timer":
 		metric.MinValue, metric.MaxValue, _ = metric.AllValues.Minmax()
 
-		// Make calculations based on the desired quantile.
-		quantileValue := metric.AllValues.Quantile(quantile)
-		quantileTotal := float64(0)
-		quantileCount := int(0)
-		for _, value := range metric.AllValues {
-			if value > quantileValue {
-				break
+		metric.Quantiles = make([]MetricQuantile, 0)
+		for _, q := range quantiles {
+			percentile := float64(q) / float64(100)
+			quantile := new(MetricQuantile)
+			quantile.Quantile = q
+
+			// Make calculations based on the desired quantile.
+			quantile.Boundary = metric.AllValues.Quantile(percentile)
+			for _, value := range metric.AllValues {
+				if value > quantile.Boundary {
+					break
+				}
+				quantile.AllValues = append(quantile.AllValues, value)
 			}
-			quantileTotal += value
-			quantileCount++
+			_, quantile.Max, _ = quantile.AllValues.Minmax()
+			quantile.Mean = quantile.AllValues.Mean()
+			quantile.Median = quantile.AllValues.Median()
+			quantile.Sum = quantile.AllValues.Sum()
+			metric.Quantiles = append(metric.Quantiles, *quantile)
 		}
-		metric.MaxInThreshold = quantileValue
-		metric.MeanInThreshold = quantileTotal / float64(quantileCount)
-		metric.SumInThreshold = quantileTotal
 		fallthrough
 	default:
 		metric.MedianValue = metric.AllValues.Median()
