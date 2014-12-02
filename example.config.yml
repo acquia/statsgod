@@ -38,7 +38,8 @@ relay:
 # Stats options
 ###
 stats:
-    percentile: 80
+    percentile:
+        - 80
 
 ###
 # Debug options

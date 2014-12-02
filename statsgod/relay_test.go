@@ -64,6 +64,7 @@ var _ = Describe("Relay", func() {
 		Context("when creating a CarbonRelay", func() {
 			It("should be a complete structure", func() {
 				backendRelay := CreateRelay(RelayTypeCarbon).(*CarbonRelay)
+				backendRelay.Percentile = []int{50, 75, 90}
 				Expect(backendRelay.FlushInterval).ShouldNot(Equal(nil))
 				Expect(backendRelay.Percentile).ShouldNot(Equal(nil))
 				// At this point the connection pool has not been established.
@@ -73,17 +74,23 @@ var _ = Describe("Relay", func() {
 				logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
 				pool, _ := CreateConnectionPool(1, fmt.Sprintf("127.0.0.1:%d", tmpPort), ConnPoolTypeTcp, 10*time.Second, logger)
 				backendRelay.ConnectionPool = pool
-				metricOne, _ := ParseMetricString("test.one:3|c")
-				metricTwo, _ := ParseMetricString("test.two:3|ms")
-				metricThree, _ := ParseMetricString("test.three:3|g")
-				backendRelay.Relay(*metricOne, logger)
-				backendRelay.Relay(*metricTwo, logger)
-				backendRelay.Relay(*metricThree, logger)
+				testMetrics := []string{
+					"test.one:3|c",
+					"test.two:3|g",
+					"test.three:3|ms",
+					"test.four:3|s",
+				}
+
+				var metric *Metric
+				for _, testMetric := range testMetrics {
+					metric, _ = ParseMetricString(testMetric)
+					backendRelay.Relay(*metric, logger)
+				}
 
 				// Test a broken relay.
 				StopTemporaryListener()
 
-				Expect(func() { backendRelay.Relay(*metricOne, logger) }).Should(Panic())
+				Expect(func() { backendRelay.Relay(*metric, logger) }).Should(Panic())
 
 				// Restart the broken relay to shutdown properly.
 				tmpPort = StartTemporaryListener()

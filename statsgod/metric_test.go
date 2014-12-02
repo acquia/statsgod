@@ -171,7 +171,7 @@ var _ = Describe("Metrics", func() {
 			}
 			It("should calculate the total and rate properly", func() {
 				metricCount := metrics["test.count"]
-				ProcessMetric(&metricCount, time.Second*10, float64(0.8), logger)
+				ProcessMetric(&metricCount, time.Second*10, []int{80}, logger)
 				Expect(metricCount.ValuesPerSecond).Should(Equal(1.1))
 				Expect(metricCount.LastValue).Should(Equal(float64(11)))
 			})
@@ -184,7 +184,7 @@ var _ = Describe("Metrics", func() {
 			}
 			It("should average gauges properly", func() {
 				metricGauge := metrics["test.gauge"]
-				ProcessMetric(&metricGauge, time.Second*10, float64(0.8), logger)
+				ProcessMetric(&metricGauge, time.Second*10, []int{80}, logger)
 				Expect(metricGauge.MedianValue).Should(Equal(30.5))
 				Expect(metricGauge.MeanValue).Should(Equal(38.5))
 				Expect(metricGauge.LastValue).Should(Equal(100.0))
@@ -198,15 +198,34 @@ var _ = Describe("Metrics", func() {
 			}
 			It("should calculate timer values properly", func() {
 				metricTimer := metrics["test.timer"]
-				ProcessMetric(&metricTimer, time.Second*10, float64(0.9), logger)
+				ProcessMetric(&metricTimer, time.Second*10, []int{50, 75, 90}, logger)
+
+				Expect(len(metricTimer.Quantiles)).Should(Equal(3))
+
 				Expect(metricTimer.MinValue).Should(Equal(float64(9)))
 				Expect(metricTimer.MaxValue).Should(Equal(float64(169)))
 				Expect(metricTimer.MeanValue).Should(Equal(float64(74)))
 				Expect(metricTimer.MedianValue).Should(Equal(float64(64)))
-				Expect(metricTimer.MeanInThreshold).Should(Equal(float64(64.5)))
-				Expect(metricTimer.MaxInThreshold).Should(Equal(float64(144)))
-				Expect(metricTimer.SumInThreshold).Should(Equal(float64(645)))
 				Expect(metricTimer.LastValue).Should(Equal(float64(169)))
+				// Quantiles
+				q := metricTimer.Quantiles[0]
+				Expect(q.Mean).Should(Equal(float64(33.166666666666664)))
+				Expect(q.Median).Should(Equal(float64(30.5)))
+				Expect(q.Max).Should(Equal(float64(64)))
+				Expect(q.Sum).Should(Equal(float64(199)))
+
+				q = metricTimer.Quantiles[1]
+				GinkgoWriter.Write([]byte(fmt.Sprintf("%v", q)))
+				Expect(q.Mean).Should(Equal(float64(47.5)))
+				Expect(q.Median).Should(Equal(float64(42.5)))
+				Expect(q.Max).Should(Equal(float64(100)))
+				Expect(q.Sum).Should(Equal(float64(380)))
+
+				q = metricTimer.Quantiles[2]
+				Expect(q.Mean).Should(Equal(float64(64.5)))
+				Expect(q.Median).Should(Equal(float64(56.5)))
+				Expect(q.Max).Should(Equal(float64(144)))
+				Expect(q.Sum).Should(Equal(float64(645)))
 			})
 
 			// Test the set-metric-type unique values.
@@ -217,14 +236,14 @@ var _ = Describe("Metrics", func() {
 			}
 			It("should calculate set unique values properly", func() {
 				metricSet := metrics["test.set"]
-				ProcessMetric(&metricSet, time.Second*10, float64(0.9), logger)
+				ProcessMetric(&metricSet, time.Second*10, []int{90}, logger)
 				Expect(metricSet.LastValue).Should(Equal(float64(11)))
 			})
 
 			Measure("it should process metrics quickly.", func(b Benchmarker) {
 				metric := metrics["test.gauge"]
 				runtime := b.Time("runtime", func() {
-					ProcessMetric(&metric, time.Second*10, float64(0.8), logger)
+					ProcessMetric(&metric, time.Second*10, []int{80}, logger)
 				})
 
 				Expect(runtime.Seconds()).Should(BeNumerically("<", metricBenchmarkTimeLimit), "it should process metrics quickly.")

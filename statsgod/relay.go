@@ -52,14 +52,13 @@ func CreateRelay(relayType string) MetricRelay {
 // CarbonRelay implements MetricRelay.
 type CarbonRelay struct {
 	FlushInterval  time.Duration
-	Percentile     int
+	Percentile     []int
 	ConnectionPool *ConnectionPool
 }
 
 // Relay implements MetricRelay::Relay().
 func (c CarbonRelay) Relay(metric Metric, logger Logger) bool {
-	quantile := float64(c.Percentile) / float64(100)
-	ProcessMetric(&metric, c.FlushInterval, quantile, logger)
+	ProcessMetric(&metric, c.FlushInterval, c.Percentile, logger)
 	// @todo: are we ever setting flush time?
 	stringTime := strconv.Itoa(metric.FlushTime)
 	var gkey string
@@ -98,14 +97,19 @@ func (c CarbonRelay) Relay(metric Metric, logger Logger) bool {
 		sendCarbonMetric(gkey, metric.MinValue, stringTime, true, c, logger)
 
 		// Quantile values.
-		gkey = fmt.Sprintf("stats.timers.%s.mean_%d", metric.Key, c.Percentile)
-		sendCarbonMetric(gkey, metric.MeanInThreshold, stringTime, true, c, logger)
+		for _, q := range metric.Quantiles {
+			gkey = fmt.Sprintf("stats.timers.%s.mean_%d", metric.Key, q.Quantile)
+			sendCarbonMetric(gkey, q.Mean, stringTime, true, c, logger)
 
-		gkey = fmt.Sprintf("stats.timers.%s.upper_%d", metric.Key, c.Percentile)
-		sendCarbonMetric(gkey, metric.MaxInThreshold, stringTime, true, c, logger)
+			gkey = fmt.Sprintf("stats.timers.%s.median%d", metric.Key, q.Quantile)
+			sendCarbonMetric(gkey, q.Median, stringTime, true, c, logger)
 
-		gkey = fmt.Sprintf("stats.timers.%s.sum_%d", metric.Key, c.Percentile)
-		sendCarbonMetric(gkey, metric.SumInThreshold, stringTime, true, c, logger)
+			gkey = fmt.Sprintf("stats.timers.%s.upper_%d", metric.Key, q.Quantile)
+			sendCarbonMetric(gkey, q.Max, stringTime, true, c, logger)
+
+			gkey = fmt.Sprintf("stats.timers.%s.sum_%d", metric.Key, q.Quantile)
+			sendCarbonMetric(gkey, q.Sum, stringTime, true, c, logger)
+		}
 	}
 	return true
 }
@@ -157,13 +161,12 @@ func sendCarbonMetric(key string, v float64, t string, retry bool, relay CarbonR
 // MockRelay implements MetricRelay.
 type MockRelay struct {
 	FlushInterval time.Duration
-	Percentile    int
+	Percentile    []int
 }
 
 // Relay implements MetricRelay::Relay().
 func (c MockRelay) Relay(metric Metric, logger Logger) bool {
-	quantile := float64(c.Percentile) / float64(100)
-	ProcessMetric(&metric, c.FlushInterval, quantile, logger)
+	ProcessMetric(&metric, c.FlushInterval, c.Percentile, logger)
 	logger.Trace.Printf(fmt.Sprintf("Mock flush: %v", metric))
 	return true
 }
