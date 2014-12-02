@@ -119,3 +119,14 @@ func (values ValueSlice) Quantile(quantile float64) float64 {
 		return (1-delta)*values.Get(boundary) + delta*values.Get(boundary+1)
 	}
 }
+
+// Sum finds the total of all values.
+func (values ValueSlice) Sum() float64 {
+	sum := float64(0)
+	length := values.Len()
+	for i := 0; i < length; i++ {
+		sum += values.Get(i)
+	}
+
+	return sum
+}
