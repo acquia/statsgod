@@ -276,19 +276,19 @@ func prepareRuntimeMetrics(metrics map[string]statsgod.Metric, config statsgod.C
 		// Prepare a metric for the memory allocated.
 		heapAllocKey := fmt.Sprintf("statsgod.%s.runtime.memory.heapalloc", hostname)
 		heapAllocValue := float64(memStats.HeapAlloc) / float64(Megabyte)
-		heapAllocMetric := statsgod.CreateSimpleMetric(heapAllocKey, heapAllocValue, "gauge")
+		heapAllocMetric := statsgod.CreateSimpleMetric(heapAllocKey, heapAllocValue, statsgod.MetricTypeGauge)
 		metrics[heapAllocMetric.Key] = *heapAllocMetric
 
 		// Prepare a metric for the memory allocated that is still in use.
 		allocKey := fmt.Sprintf("statsgod.%s.runtime.memory.alloc", hostname)
 		allocValue := float64(memStats.Alloc) / float64(Megabyte)
-		allocMetric := statsgod.CreateSimpleMetric(allocKey, allocValue, "gauge")
+		allocMetric := statsgod.CreateSimpleMetric(allocKey, allocValue, statsgod.MetricTypeGauge)
 		metrics[allocMetric.Key] = *allocMetric
 
 		// Prepare a metric for the memory obtained from the system.
 		sysKey := fmt.Sprintf("statsgod.%s.runtime.memory.sys", hostname)
 		sysValue := float64(memStats.Sys) / float64(Megabyte)
-		sysMetric := statsgod.CreateSimpleMetric(sysKey, sysValue, "gauge")
+		sysMetric := statsgod.CreateSimpleMetric(sysKey, sysValue, statsgod.MetricTypeGauge)
 		metrics[sysMetric.Key] = *sysMetric
 	}
 }
@@ -299,12 +299,12 @@ func prepareFlushMetrics(metrics map[string]statsgod.Metric, config statsgod.Con
 		// Prepare the duration metric.
 		durationKey := fmt.Sprintf("statsgod.%s.flush.duration", hostname)
 		durationValue := float64(int64(flushStop.Sub(flushStart).Nanoseconds()) / int64(time.Millisecond))
-		durationMetric := statsgod.CreateSimpleMetric(durationKey, durationValue, "timer")
+		durationMetric := statsgod.CreateSimpleMetric(durationKey, durationValue, statsgod.MetricTypeTimer)
 		metrics[durationMetric.Key] = *durationMetric
 
 		// Prepare the counter metric.
 		countKey := fmt.Sprintf("statsgod.%s.flush.count", hostname)
-		countMetric := statsgod.CreateSimpleMetric(countKey, float64(flushCount), "gauge")
+		countMetric := statsgod.CreateSimpleMetric(countKey, float64(flushCount), statsgod.MetricTypeGauge)
 		metrics[countMetric.Key] = *countMetric
 	}
 }
