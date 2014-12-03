@@ -16,7 +16,7 @@ connection:
         port: 8126
         maxpacket: 1024
     unix:
-        file: /var/run/statsgod.sock
+        file: /var/run/statsgod/statsgod.sock
 
 ###
 # Backend relay carbon server configuration
