@@ -1,30 +1,33 @@
 #! /bin/sh
 ### BEGIN INIT INFO
-# Provides:          skeleton
+# Provides:          statsgod
 # Required-Start:    $remote_fs $syslog
 # Required-Stop:     $remote_fs $syslog
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
-# Short-Description: Example initscript
-# Description:       This file should be used to construct scripts to be
-#                    placed in /etc/init.d.
+# Short-Description: statsgod service
+# Description:       Statsgod provides socket listeners to aggregate metrics and
+#                    relay them to a remote backend.
 ### END INIT INFO
 
-# Author: Foo Bar <foobar@baz.org>
-#
-# Please remove the "Author" lines above and replace them
-# with your own name if you copy and modify this script.
-
-# Do NOT "set -e"
-
-# PATH should only include /usr/* if it runs after the mountnfs.sh script
 PATH=/sbin:/usr/sbin:/bin:/usr/bin
 DESC="Statsgod metric aggregator"
 NAME=statsgod
 DAEMON=/usr/bin/$NAME
 DAEMON_ARGS=""
-PIDFILE=/var/run/$NAME.pid
 SCRIPTNAME=/etc/init.d/$NAME
+RUN_DIR=/var/run/$NAME
+LOG_DIR=/var/log/$NAME
+PIDFILE=$RUN_DIR/$NAME.pid
+
+# The service can be started by specifying via an enviornment variable:
+# sudo STATSGOD_USER=statsgod /etc/init.d/statsgod start
+if [ -n "${STATSGOD_USER-}" ]; then
+	id -u $STATSGOD_USER > /dev/null 2>&1 || exit 1
+	RUN_USER="--chuid $STATSGOD_USER"
+else
+	STATSGOD_USER=$(whoami)
+fi
 
 # Exit if the package is not installed
 [ -x "$DAEMON" ] || exit 0
@@ -45,15 +48,21 @@ SCRIPTNAME=/etc/init.d/$NAME
 #
 do_start()
 {
+	# Ensure that the log and run directories are present.
+	# This script will need to be executed as a super user.
+	mkdir -p $LOG_DIR
+	chown $STATSGOD_USER $LOG_DIR
+	mkdir -p $RUN_DIR
+	chown $STATSGOD_USER $RUN_DIR
 	# Return
 	#   0 if daemon has been started
 	#   1 if daemon was already running
 	#   2 if daemon could not be started
-	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON \
+	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON $RUN_USER \
 		--make-pidfile --background --no-close --test > /dev/null \
 		|| return 1
-	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON \
-		--make-pidfile --background --no-close -- $DAEMON_ARGS >> /var/log/statsgod.log 2>> /var/log/statsgod.err \
+	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON $RUN_USER \
+		--make-pidfile --background --no-close -- $DAEMON_ARGS >> /var/log/statsgod/statsgod.log 2>> /var/log/statsgod/statsgod.err \
 		|| return 2
 	# Add code here, if necessary, that waits for the process to be ready
 	# to handle requests from services started subsequently which depend
