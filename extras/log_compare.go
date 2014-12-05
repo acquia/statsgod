@@ -27,6 +27,7 @@ import (
 
 var logInputFile = flag.String("in", "/tmp/statsgod.input", "The stdout from loadtest.go")
 var logOutputFile = flag.String("out", "/tmp/statsgod.output", "The stdout from statsgod.go")
+var token = flag.String("token", "", "An auth token to prepend to the metric string.")
 
 func main() {
 	flag.Usage = func() {
@@ -73,6 +74,7 @@ go run extras/log_compare.go -in=/tmp/statsgod.input -out=/tmp/statsgod.output
 	fmt.Printf("Lines in output file (%s): %d\n", *logOutputFile, outputLen)
 
 	var metricType string
+	var metricKey string
 
 	if inputLen < outputLen {
 		totalLines = outputLen
@@ -83,17 +85,31 @@ go run extras/log_compare.go -in=/tmp/statsgod.input -out=/tmp/statsgod.output
 	inputStringsLen := 0
 	outputStringsLen := 0
 
+	// If the user specified an auth token, construct it here.
+	metricToken := ""
+	if *token != "" {
+		metricToken = *token + "\\."
+	}
+
 	for i := 0; i < totalLines; i++ {
 		metricType = ""
+		metricKey = ""
 
 		if i < inputLen {
-			inputR, _ := regexp.Match("^[^\\s]+\\:[0-9\\.]+\\|(c|g|s|ms).*$", []byte(inputLines[i]))
+			inputR, _ := regexp.Match("^"+metricToken+"[^\\s]+\\:[0-9\\.]+\\|(c|g|s|ms).*$", []byte(inputLines[i]))
 			if inputR {
-				inputStringsLen++
-				if inputStrings[inputLines[i]] == 0 {
-					inputStrings[inputLines[i]] = 1
+				// Strip off the token if it exists as the output won't specify it.
+				if metricToken != "" {
+					metricKey = strings.Replace(inputLines[i], *token+".", "", 1)
 				} else {
-					inputStrings[inputLines[i]]++
+					metricKey = inputLines[i]
+				}
+
+				inputStringsLen++
+				if inputStrings[metricKey] == 0 {
+					inputStrings[metricKey] = 1
+				} else {
+					inputStrings[metricKey]++
 				}
 			}
 		}
