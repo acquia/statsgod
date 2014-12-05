@@ -28,11 +28,19 @@ import (
 
 var metricBenchmarkTimeLimit = 0.25
 
+// acceptablePrecision is used to round values to an acceptable test precision.
+var acceptablePrecision = float64(10000)
+
 // Creates a Metric struct with default values.
 func getDefaultMetricStructure() Metric {
 	var metric = new(Metric)
 
 	return *metric
+}
+
+// Adjusts values to an acceptable precision for testing.
+func testPrecision(value float64) float64 {
+	return math.Floor(value*acceptablePrecision) / acceptablePrecision
 }
 
 var _ = Describe("Metrics", func() {
@@ -45,10 +53,16 @@ var _ = Describe("Metrics", func() {
 			Expect(metric.MetricType).ShouldNot(Equal(nil))
 			Expect(metric.TotalHits).ShouldNot(Equal(nil))
 			Expect(metric.LastValue).ShouldNot(Equal(nil))
+			Expect(metric.MinValue).ShouldNot(Equal(nil))
+			Expect(metric.MaxValue).ShouldNot(Equal(nil))
+			Expect(metric.MeanValue).ShouldNot(Equal(nil))
+			Expect(metric.MedianValue).ShouldNot(Equal(nil))
 			Expect(metric.FlushTime).ShouldNot(Equal(nil))
 			Expect(metric.LastFlushed).ShouldNot(Equal(nil))
+			Expect(metric.SampleRate).ShouldNot(Equal(nil))
 
 			// Slices when empty evaluate to nil, check for len instead.
+			Expect(len(metric.Quantiles)).Should(Equal(0))
 			Expect(len(metric.AllValues)).Should(Equal(0))
 		})
 	})
@@ -57,12 +71,20 @@ var _ = Describe("Metrics", func() {
 		Context("when we parse metrics", func() {
 			// Test that we can correctly parse a metric string.
 			It("should contain correct values", func() {
-				metricOne, err := ParseMetricString("test.three:3|g")
+				metricOne, err := ParseMetricString("test.three:3|g|@0.75")
 				Expect(err).Should(BeNil())
 				Expect(metricOne).ShouldNot(Equal(nil))
 				Expect(metricOne.Key).Should(Equal("test.three"))
 				Expect(metricOne.LastValue).Should(Equal(float64(3)))
 				Expect(metricOne.MetricType).Should(Equal(MetricTypeGauge))
+				Expect(metricOne.SampleRate).Should(Equal(float64(0.75)))
+			})
+
+			It("should contain reasonable defaults", func() {
+				metricOne, _ := ParseMetricString("test.three:3|g")
+				Expect(metricOne).ShouldNot(Equal(nil))
+				Expect(metricOne.TotalHits).Should(Equal(float64(1.0)))
+				Expect(metricOne.SampleRate).Should(Equal(float64(1.0)))
 			})
 
 			// Test that incorrect strings trigger errors.
@@ -79,9 +101,9 @@ var _ = Describe("Metrics", func() {
 
 			Measure("it should be able to parse metric strings quickly.", func(b Benchmarker) {
 				runtime := b.Time("runtime", func() {
-					metric, _ := ParseMetricString("test:1|g")
-					metric, _ = ParseMetricString("test:2|c")
-					metric, _ = ParseMetricString("test:3|ms")
+					metric, _ := ParseMetricString("test:1|g|@0.25")
+					metric, _ = ParseMetricString("test:2|c|@0.5")
+					metric, _ = ParseMetricString("test:3|ms|@0.75")
 					Expect(metric).ShouldNot(Equal(nil))
 				})
 
@@ -101,7 +123,7 @@ var _ = Describe("Metrics", func() {
 				Expect(metric.MetricType).Should(Equal(metricType))
 				Expect(metric.LastValue).Should(Equal(value))
 				Expect(metric.AllValues[0]).Should(Equal(value))
-				Expect(metric.TotalHits).Should(Equal(1))
+				Expect(metric.TotalHits).Should(Equal(float64(1.0)))
 			})
 		})
 
@@ -109,15 +131,24 @@ var _ = Describe("Metrics", func() {
 			metrics := make(map[string]Metric)
 			testMetrics := []string{
 				"test.one:1|c",
+				"test.one:2|c|@0.25",
+				"test.one:3|c",
 				"test.one:1|c",
-				"test.one:1|c",
-				"test.one:1|c",
-				"test.one:1|c",
+				"test.one:1|c|@0.5",
+				"test.one:1|c|@0.95",
+				"test.one:5|c",
+				"test.one:1|c|@0.75",
 				"test.two:3|c",
 				"test.three:45|g",
+				"test.three:35|g",
 				"test.three:33|g",
-				"test.four:100|ms",
-				"test.four:150|ms",
+				"test.four:100|ms|@0.25",
+				"test.four:150|ms|@0.5",
+				"test.four:250|ms",
+				"test.four:50|ms|@0.95",
+				"test.four:150|ms|@0.95",
+				"test.four:120|ms|@0.75",
+				"test.four:130|ms|@0.95",
 			}
 
 			for _, metricString := range testMetrics {
@@ -132,21 +163,27 @@ var _ = Describe("Metrics", func() {
 				// Test that the equal namespaces sum values and increment hits.
 				existingMetric, metricExists := metrics["test.one"]
 				Expect(metricExists).Should(Equal(true))
-				Expect(len(existingMetric.AllValues)).Should(Equal(5))
-				Expect(existingMetric.TotalHits).Should(Equal(5))
-				Expect(existingMetric.LastValue).Should(Equal(float64(5)))
+				Expect(len(existingMetric.AllValues)).Should(Equal(8))
+				Expect(testPrecision(existingMetric.TotalHits)).Should(Equal(float64(12.3859)))
+				Expect(testPrecision(existingMetric.LastValue)).Should(Equal(float64(22.3859)))
 
 				existingMetric, metricExists = metrics["test.two"]
 				Expect(metricExists).Should(Equal(true))
 				Expect(len(existingMetric.AllValues)).Should(Equal(1))
-				Expect(existingMetric.TotalHits).Should(Equal(1))
-				Expect(existingMetric.LastValue).Should(Equal(float64(3)))
+				Expect(existingMetric.TotalHits).Should(Equal(float64(1.0)))
+				Expect(existingMetric.LastValue).Should(Equal(float64(3.0)))
 
 				existingMetric, metricExists = metrics["test.three"]
 				Expect(metricExists).Should(Equal(true))
-				Expect(len(existingMetric.AllValues)).Should(Equal(2))
-				Expect(existingMetric.TotalHits).Should(Equal(2))
-				Expect(existingMetric.LastValue).Should(Equal(float64(33)))
+				Expect(len(existingMetric.AllValues)).Should(Equal(3))
+				Expect(existingMetric.TotalHits).Should(Equal(float64(3.0)))
+				Expect(existingMetric.LastValue).Should(Equal(float64(33.0)))
+
+				existingMetric, metricExists = metrics["test.four"]
+				Expect(metricExists).Should(Equal(true))
+				Expect(len(existingMetric.AllValues)).Should(Equal(7))
+				Expect(testPrecision(existingMetric.TotalHits)).Should(Equal(float64(11.4912)))
+				Expect(existingMetric.LastValue).Should(Equal(float64(130.0)))
 			})
 
 			Measure("it should aggregate metrics quickly.", func(b Benchmarker) {
@@ -198,6 +235,21 @@ var _ = Describe("Metrics", func() {
 				Expect(metricCount.LastValue).Should(Equal(float64(11)))
 			})
 
+			It("should magnify sample rates properly", func() {
+				metricSample, _ := ParseMetricString("test.count:1|c|@0.1")
+				Expect(testPrecision(metricSample.TotalHits)).Should(Equal(float64(9.9999)))
+				metricSample, _ = ParseMetricString("test.count:1|c|@0.25")
+				Expect(metricSample.TotalHits).Should(Equal(float64(4.0)))
+				metricSample, _ = ParseMetricString("test.count:3|c|@0.5")
+				Expect(metricSample.TotalHits).Should(Equal(float64(2.0)))
+				metricSample, _ = ParseMetricString("test.count:4|c|@0.75")
+				Expect(testPrecision(metricSample.TotalHits)).Should(Equal(float64(1.3333)))
+				metricSample, _ = ParseMetricString("test.count:3|c|@0.9")
+				Expect(testPrecision(metricSample.TotalHits)).Should(Equal(float64(1.1111)))
+				metricSample, _ = ParseMetricString("test.count:3|c|@0.95")
+				Expect(testPrecision(metricSample.TotalHits)).Should(Equal(float64(1.0526)))
+			})
+
 			// Test that gauges average properly.
 			for i := 1; i < 11; i++ {
 				gauge := float64(i) * float64(i)
@@ -215,7 +267,7 @@ var _ = Describe("Metrics", func() {
 			// Test all of the timer calculations.
 			for i := 3; i < 14; i++ {
 				timer := float64(i) * float64(i)
-				metricTimer, _ := ParseMetricString(fmt.Sprintf("test.timer:%f|ms", timer))
+				metricTimer, _ := ParseMetricString(fmt.Sprintf("test.timer:%f|ms|@0.9", timer))
 				AggregateMetric(metrics, *metricTimer)
 			}
 			It("should calculate timer values properly", func() {
@@ -229,6 +281,8 @@ var _ = Describe("Metrics", func() {
 				Expect(metricTimer.MeanValue).Should(Equal(float64(74)))
 				Expect(metricTimer.MedianValue).Should(Equal(float64(64)))
 				Expect(metricTimer.LastValue).Should(Equal(float64(169)))
+				Expect(testPrecision(metricTimer.TotalHits)).Should(Equal(float64(12.2222)))
+				Expect(testPrecision(metricTimer.ValuesPerSecond)).Should(Equal(float64(1.2222)))
 				// Quantiles
 				q := metricTimer.Quantiles[0]
 				Expect(q.Mean).Should(Equal(float64(33.166666666666664)))
