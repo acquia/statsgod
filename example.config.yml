@@ -46,6 +46,13 @@ relay:
 stats:
     percentile:
         - 80
+    prefix:
+        counters: "counts"
+        gauges: "gauges"
+        global: "stats"
+        rates: "rates"
+        sets: "sets"
+        timers: "timers"
 
 ###
 # Debug options

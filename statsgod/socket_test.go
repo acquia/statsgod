@@ -103,7 +103,6 @@ var _ = Describe("Sockets", func() {
 						case <-time.After(5 * time.Second):
 							message = ""
 						}
-						GinkgoWriter.Write([]byte(fmt.Sprintf("type: %s - value: %s|%s\n", ts.socketDesc, rm, message)))
 						Expect(message).Should(Equal(rm))
 					}
 				}
