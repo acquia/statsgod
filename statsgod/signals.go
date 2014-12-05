@@ -24,6 +24,7 @@ import (
 	"syscall"
 )
 
+// ListenForSignals will listen for quit/reload signals and respond accordingly.
 func ListenForSignals(finishChannel chan int, config *ConfigValues, configFile *string, logger Logger) {
 	// For signal handling we catch several signals. ABRT, INT, TERM and QUIT
 	// are all used to clean up and stop the process. HUP is used to signal
