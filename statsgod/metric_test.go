@@ -62,7 +62,7 @@ var _ = Describe("Metrics", func() {
 				Expect(metricOne).ShouldNot(Equal(nil))
 				Expect(metricOne.Key).Should(Equal("test.three"))
 				Expect(metricOne.LastValue).Should(Equal(float64(3)))
-				Expect(metricOne.MetricType).Should(Equal("gauge"))
+				Expect(metricOne.MetricType).Should(Equal(MetricTypeGauge))
 			})
 
 			// Test that incorrect strings trigger errors.
@@ -95,7 +95,7 @@ var _ = Describe("Metrics", func() {
 			It("should create a metric with the correct values", func() {
 				key := "test"
 				value := float64(123)
-				metricType := "gauge"
+				metricType := MetricTypeGauge
 				metric := CreateSimpleMetric(key, value, metricType)
 				Expect(metric.Key).Should(Equal(key))
 				Expect(metric.MetricType).Should(Equal(metricType))

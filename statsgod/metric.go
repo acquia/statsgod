@@ -35,6 +35,19 @@ const (
 	SeparatorValueType = "|"
 )
 
+const (
+	// MetricTypeCounter describes a counter, sent as "c"
+	MetricTypeCounter = 0
+	// MetricTypeGauge describes a gauge, sent as "g"
+	MetricTypeGauge = 1
+	// MetricTypeSet describes a set, set as "s"
+	MetricTypeSet = 2
+	// MetricTypeTimer describes a timer, set as "ms"
+	MetricTypeTimer = 3
+	// MetricTypeUnknown describes a malformed metric type
+	MetricTypeUnknown = 4
+)
+
 // MetricQuantile tracks a specified quantile measurement.
 type MetricQuantile struct {
 	Quantile  int        // The specified percentile.
@@ -49,7 +62,7 @@ type MetricQuantile struct {
 // Metric is our main data type.
 type Metric struct {
 	Key             string           // Name of the metric.
-	MetricType      string           // What type of metric is it (gauge, counter, timer)
+	MetricType      int              // What type of metric is it (gauge, counter, timer)
 	TotalHits       int              // Number of times it has been used.
 	LastValue       float64          // The last value stored.
 	ValuesPerSecond float64          // The number of values per second.
@@ -64,7 +77,7 @@ type Metric struct {
 }
 
 // CreateSimpleMetric is a helper to quickly create a metric with the minimum information.
-func CreateSimpleMetric(key string, value float64, metricType string) *Metric {
+func CreateSimpleMetric(key string, value float64, metricType int) *Metric {
 	metric := new(Metric)
 	metric.Key = key
 	metric.MetricType = metricType
@@ -95,7 +108,7 @@ func ParseMetricString(metricString string) (*Metric, error) {
 	}
 
 	// Locate the metric type.
-	MetricType, err := shortTypeToLong(strings.TrimSpace(split2[1]))
+	MetricType, err := getMetricType(strings.TrimSpace(split2[1]))
 	if err != nil {
 		// We were unable to discern a metric type.
 		return metric, errors.New("Invalid data string")
@@ -131,13 +144,13 @@ func AggregateMetric(metrics map[string]Metric, metric Metric) {
 		existingMetric.AllValues = append(existingMetric.AllValues, metric.LastValue)
 
 		switch {
-		case metric.MetricType == "gauge":
-			existingMetric.LastValue = metric.LastValue
-		case metric.MetricType == "counter":
+		case metric.MetricType == MetricTypeCounter:
 			existingMetric.LastValue += metric.LastValue
-		case metric.MetricType == "timer":
+		case metric.MetricType == MetricTypeGauge:
 			existingMetric.LastValue = metric.LastValue
-		case metric.MetricType == "set":
+		case metric.MetricType == MetricTypeSet:
+			existingMetric.LastValue = metric.LastValue
+		case metric.MetricType == MetricTypeTimer:
 			existingMetric.LastValue = metric.LastValue
 		}
 
@@ -153,11 +166,11 @@ func ProcessMetric(metric *Metric, flushDuration time.Duration, quantiles []int,
 
 	sort.Sort(metric.AllValues)
 	switch metric.MetricType {
-	case "counter":
+	case MetricTypeCounter:
 		metric.ValuesPerSecond = float64(len(metric.AllValues)) / float64(flushInterval)
-	case "set":
+	case MetricTypeSet:
 		metric.LastValue = float64(metric.AllValues.UniqueCount())
-	case "timer":
+	case MetricTypeTimer:
 		metric.MinValue, metric.MaxValue, _ = metric.AllValues.Minmax()
 
 		metric.Quantiles = make([]MetricQuantile, 0)
@@ -187,17 +200,17 @@ func ProcessMetric(metric *Metric, flushDuration time.Duration, quantiles []int,
 	}
 }
 
-// shortTypeToLong converts a single-character metric format to a full term.
-func shortTypeToLong(short string) (string, error) {
+// getMetricType converts a single-character metric format to a full term.
+func getMetricType(short string) (int, error) {
 	switch {
 	case "c" == short:
-		return "counter", nil
+		return MetricTypeCounter, nil
 	case "g" == short:
-		return "gauge", nil
-	case "ms" == short:
-		return "timer", nil
+		return MetricTypeGauge, nil
 	case "s" == short:
-		return "set", nil
+		return MetricTypeSet, nil
+	case "ms" == short:
+		return MetricTypeTimer, nil
 	}
-	return "unknown", errors.New("unknown metric type")
+	return MetricTypeUnknown, errors.New("unknown metric type")
 }
