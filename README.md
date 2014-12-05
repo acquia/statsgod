@@ -93,6 +93,30 @@ Statsgod provides support for the following metric types:
 		# flush produces a single value counting the unique metrics sent:
 		[set prefix].my.unique [timestamp] 2
 
+## Authentication
+Auth is handled via the statsgod.Auth interface. Currently there are two types of authentication: no-auth and token-auth, which are specified in the configuration file:
+
+1. No auth
+
+		# config.yml
+		service:
+			auth: "None"
+
+Works as you might expect, all metrics strings are parsed without authentication or manipulation. This is the default behavior.
+
+2. Token auth
+
+		# config.yml
+		service:
+			auth: "ConfigToken"
+			tokens:
+				"token-name": false
+				"32a3c4970093": true
+
+ConfigToken checks the configuration file for a valid auth token. The config file may specify as many tokens as needed in the service.tokens map. These are written as "string": bool where the string is the token and the bool is whether or not the token is valid. Please note that these are read into memory when the proces is started, so changes to the token map require a restart.
+
+When sending metrics, the token is specified at the beginning of the metric namespace followed by a dot. For example, a metric "32a3c4970093.my.metric:123|g" would look in the config tokens for the string "32a3c4970093" and see if that is set to true. If valid, the process will strip the token from the namespace, only parsing and aggregating "my.metric:123|g". NOTE: since metric namespaces are dot-delimited, you cannot use a dot in a token.
+
 ## Development
 To download all dependencies and compile statsgod
 

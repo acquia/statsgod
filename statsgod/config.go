@@ -32,8 +32,10 @@ import (
 // value set in LoadConfig() to ensure a safe runtime environment.
 type ConfigValues struct {
 	Service struct {
-		Name  string
-		Debug bool
+		Name   string
+		Debug  bool
+		Auth   string
+		Tokens map[string]bool
 	}
 	Connection struct {
 		Tcp struct {
@@ -75,6 +77,7 @@ func LoadConfig(filePath string) (config ConfigValues, err error) {
 	// Establish all of the default values.
 	config.Service.Name = "statsgod"
 	config.Service.Debug = false
+	config.Service.Auth = "none"
 	config.Connection.Tcp.Host = "127.0.0.1"
 	config.Connection.Tcp.Port = 8125
 	config.Connection.Udp.Host = "127.0.0.1"
@@ -106,6 +109,12 @@ func LoadConfig(filePath string) (config ConfigValues, err error) {
 	// only add the default when there are none specified in the yaml.
 	if len(config.Stats.Percentile) == 0 {
 		config.Stats.Percentile = []int{80}
+	}
+
+	// Similarly with the tokens, which is a map, only create a default if
+	// one was not read in from the yaml.
+	if len(config.Service.Tokens) == 0 {
+		config.Service.Tokens = map[string]bool{"token-name": false}
 	}
 
 	return
