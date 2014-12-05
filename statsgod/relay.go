@@ -70,19 +70,19 @@ func (c CarbonRelay) Relay(metric Metric, logger Logger) bool {
 	// Ensure all of the metrics are working correctly.
 
 	switch metric.MetricType {
-	case "gauge":
+	case MetricTypeGauge:
 		gkey = fmt.Sprintf("stats.gauges.%s", metric.Key)
 		sendCarbonMetric(gkey, metric.LastValue, stringTime, true, c, logger)
-	case "counter":
+	case MetricTypeCounter:
 		gkey = fmt.Sprintf("stats.rates.%s", metric.Key)
 		sendCarbonMetric(gkey, metric.ValuesPerSecond, stringTime, true, c, logger)
 
 		gkey = fmt.Sprintf("stats.counts.%s", metric.Key)
 		sendCarbonMetric(gkey, metric.LastValue, stringTime, true, c, logger)
-	case "set":
+	case MetricTypeSet:
 		gkey = fmt.Sprintf("stats.sets.%s", metric.Key)
 		sendCarbonMetric(gkey, metric.LastValue, stringTime, true, c, logger)
-	case "timer":
+	case MetricTypeTimer:
 		// Cumulative values.
 		gkey = fmt.Sprintf("stats.timers.%s.mean_value", metric.Key)
 		sendCarbonMetric(gkey, metric.MeanValue, stringTime, true, c, logger)
