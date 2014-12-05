@@ -54,6 +54,39 @@ type CarbonRelay struct {
 	FlushInterval  time.Duration
 	Percentile     []int
 	ConnectionPool *ConnectionPool
+	Prefixes       map[string]string
+}
+
+// SetPrefixes is a helper to set up the prefixes used when relaying data.
+func (c CarbonRelay) GetPrefixes(config ConfigValues) map[string]string {
+	prefixes := map[string]string{
+		"counters": "",
+		"gauges":   "",
+		"global":   "",
+		"rates":    "",
+		"sets":     "",
+		"timers":   "",
+	}
+	if config.Stats.Prefix.Global != "" {
+		prefixes["global"] = config.Stats.Prefix.Global + "."
+	}
+	if config.Stats.Prefix.Counters != "" {
+		prefixes["counters"] = prefixes["global"] + config.Stats.Prefix.Counters + "."
+	}
+	if config.Stats.Prefix.Gauges != "" {
+		prefixes["gauges"] = prefixes["global"] + config.Stats.Prefix.Gauges + "."
+	}
+	if config.Stats.Prefix.Rates != "" {
+		prefixes["rates"] = prefixes["global"] + config.Stats.Prefix.Rates + "."
+	}
+	if config.Stats.Prefix.Sets != "" {
+		prefixes["sets"] = prefixes["global"] + config.Stats.Prefix.Sets + "."
+	}
+	if config.Stats.Prefix.Timers != "" {
+		prefixes["timers"] = prefixes["global"] + config.Stats.Prefix.Timers + "."
+	}
+
+	return prefixes
 }
 
 // Relay implements MetricRelay::Relay().
@@ -65,49 +98,45 @@ func (c CarbonRelay) Relay(metric Metric, logger Logger) bool {
 
 	defer logger.Info.Println("Done sending to Graphite")
 
-	// @todo: for metrics
-	// http://blog.pkhamre.com/2012/07/24/understanding-statsd-and-graphite/
-	// Ensure all of the metrics are working correctly.
-
 	switch metric.MetricType {
 	case MetricTypeGauge:
-		gkey = fmt.Sprintf("stats.gauges.%s", metric.Key)
+		gkey = fmt.Sprintf("%s%s", c.Prefixes["gauges"], metric.Key)
 		sendCarbonMetric(gkey, metric.LastValue, stringTime, true, c, logger)
 	case MetricTypeCounter:
-		gkey = fmt.Sprintf("stats.rates.%s", metric.Key)
+		gkey = fmt.Sprintf("%s%s", c.Prefixes["rates"], metric.Key)
 		sendCarbonMetric(gkey, metric.ValuesPerSecond, stringTime, true, c, logger)
 
-		gkey = fmt.Sprintf("stats.counts.%s", metric.Key)
+		gkey = fmt.Sprintf("%s%s", c.Prefixes["counters"], metric.Key)
 		sendCarbonMetric(gkey, metric.LastValue, stringTime, true, c, logger)
 	case MetricTypeSet:
-		gkey = fmt.Sprintf("stats.sets.%s", metric.Key)
+		gkey = fmt.Sprintf("%s%s", c.Prefixes["sets"], metric.Key)
 		sendCarbonMetric(gkey, metric.LastValue, stringTime, true, c, logger)
 	case MetricTypeTimer:
 		// Cumulative values.
-		gkey = fmt.Sprintf("stats.timers.%s.mean_value", metric.Key)
+		gkey = fmt.Sprintf("%s%s.mean_value", c.Prefixes["timers"], metric.Key)
 		sendCarbonMetric(gkey, metric.MeanValue, stringTime, true, c, logger)
 
-		gkey = fmt.Sprintf("stats.timers.%s.median_value", metric.Key)
+		gkey = fmt.Sprintf("%s%s.median_value", c.Prefixes["timers"], metric.Key)
 		sendCarbonMetric(gkey, metric.MedianValue, stringTime, true, c, logger)
 
-		gkey = fmt.Sprintf("stats.timers.%s.max_value", metric.Key)
+		gkey = fmt.Sprintf("%s%s.max_value", c.Prefixes["timers"], metric.Key)
 		sendCarbonMetric(gkey, metric.MaxValue, stringTime, true, c, logger)
 
-		gkey = fmt.Sprintf("stats.timers.%s.min_value", metric.Key)
+		gkey = fmt.Sprintf("%s%s.min_value", c.Prefixes["timers"], metric.Key)
 		sendCarbonMetric(gkey, metric.MinValue, stringTime, true, c, logger)
 
 		// Quantile values.
 		for _, q := range metric.Quantiles {
-			gkey = fmt.Sprintf("stats.timers.%s.mean_%d", metric.Key, q.Quantile)
+			gkey = fmt.Sprintf("%s%s.mean_%d", c.Prefixes["timers"], metric.Key, q.Quantile)
 			sendCarbonMetric(gkey, q.Mean, stringTime, true, c, logger)
 
-			gkey = fmt.Sprintf("stats.timers.%s.median%d", metric.Key, q.Quantile)
+			gkey = fmt.Sprintf("%s%s.median%d", c.Prefixes["timers"], metric.Key, q.Quantile)
 			sendCarbonMetric(gkey, q.Median, stringTime, true, c, logger)
 
-			gkey = fmt.Sprintf("stats.timers.%s.upper_%d", metric.Key, q.Quantile)
+			gkey = fmt.Sprintf("%s%s.upper_%d", c.Prefixes["timers"], metric.Key, q.Quantile)
 			sendCarbonMetric(gkey, q.Max, stringTime, true, c, logger)
 
-			gkey = fmt.Sprintf("stats.timers.%s.sum_%d", metric.Key, q.Quantile)
+			gkey = fmt.Sprintf("%s%s.sum_%d", c.Prefixes["timers"], metric.Key, q.Quantile)
 			sendCarbonMetric(gkey, q.Sum, stringTime, true, c, logger)
 		}
 	}

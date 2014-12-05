@@ -61,6 +61,14 @@ type ConfigValues struct {
 	}
 	Stats struct {
 		Percentile []int
+		Prefix     struct {
+			Counters string
+			Gauges   string
+			Global   string
+			Rates    string
+			Sets     string
+			Timers   string
+		}
 	}
 	Debug struct {
 		Verbose bool
@@ -87,6 +95,12 @@ func LoadConfig(filePath string) (config ConfigValues, err error) {
 	config.Relay.Flush = 10 * time.Second
 	config.Carbon.Host = "127.0.0.1"
 	config.Carbon.Port = 2003
+	config.Stats.Prefix.Counters = "counts"
+	config.Stats.Prefix.Gauges = "gauges"
+	config.Stats.Prefix.Global = "stats"
+	config.Stats.Prefix.Rates = "rates"
+	config.Stats.Prefix.Sets = "sets"
+	config.Stats.Prefix.Timers = "timers"
 	config.Debug.Verbose = false
 	config.Debug.Receipt = false
 	config.Debug.Profile = false
