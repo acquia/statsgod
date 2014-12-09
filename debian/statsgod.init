@@ -19,15 +19,10 @@ SCRIPTNAME=/etc/init.d/$NAME
 RUN_DIR=/var/run/$NAME
 LOG_DIR=/var/log/$NAME
 PIDFILE=$RUN_DIR/$NAME.pid
+STATSGOD_USER=statsgod
 
-# The service can be started by specifying via an enviornment variable:
-# sudo STATSGOD_USER=statsgod /etc/init.d/statsgod start
-if [ -n "${STATSGOD_USER-}" ]; then
-	id -u $STATSGOD_USER > /dev/null 2>&1 || exit 1
-	RUN_USER="--chuid $STATSGOD_USER"
-else
-	STATSGOD_USER=$(whoami)
-fi
+# Look for $STATSGOD_USER, if it does not exist, start the daemon as the current user.
+id -u $STATSGOD_USER > /dev/null 2>&1 || STATSGOD_USER=$(whoami)
 
 # Exit if the package is not installed
 [ -x "$DAEMON" ] || exit 0
@@ -51,21 +46,23 @@ do_start()
 	# Ensure that the log and run directories are present.
 	# This script will need to be executed as a super user.
 	mkdir -p $LOG_DIR
-	chown $STATSGOD_USER $LOG_DIR
+	chown -R $STATSGOD_USER $LOG_DIR
 	chmod 775 $LOG_DIR
 	mkdir -p $RUN_DIR
-	chown $STATSGOD_USER $RUN_DIR
+	chown -R $STATSGOD_USER $RUN_DIR
 	chmod 775 $RUN_DIR
 	# Return
 	#   0 if daemon has been started
 	#   1 if daemon was already running
 	#   2 if daemon could not be started
-	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON $RUN_USER \
-		--make-pidfile --background --no-close --test > /dev/null \
-		|| return 1
-	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON $RUN_USER \
-		--make-pidfile --background --no-close -- $DAEMON_ARGS >> /var/log/statsgod/statsgod.log 2>> /var/log/statsgod/statsgod.err \
-		|| return 2
+        start-stop-daemon --start --quiet --pidfile $PIDFILE --chuid $STATSGOD_USER \
+                --make-pidfile --background --test \
+                --startas /bin/bash -- -c "exec $DAEMON $DAEMON_ARGS > /dev/null 2>&1"\
+                || return 1
+        start-stop-daemon --start --quiet --pidfile $PIDFILE --chuid $STATSGOD_USER \
+                --make-pidfile --background \
+                --startas /bin/bash -- -c "exec $DAEMON $DAEMON_ARGS >> /var/log/statsgod/statsgod.log 2>> /var/log/statsgod/statsgod.err"\
+                || return 2
 	# Add code here, if necessary, that waits for the process to be ready
 	# to handle requests from services started subsequently which depend
 	# on this one.  As a last resort, sleep for some time.
