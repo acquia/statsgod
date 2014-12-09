@@ -13,6 +13,10 @@ override_dh_auto_clean:
 override_dh_auto_build:
 	$(MAKE)
 
+override_dh_builddeb:
+	# Force gzip compression for older system wth dpkg version < 1.15.6
+	dh_builddeb -- -Zgzip
+
 override_dh_auto_install:
 	mkdir -p $(CURDIR)/debian/statsgod/usr/bin
 	mkdir -p $(CURDIR)/debian/statsgod/etc/statsgod
@@ -20,4 +24,4 @@ override_dh_auto_install:
 	install -m644  $(CURDIR)/example.config.yml $(CURDIR)/debian/statsgod/etc/statsgod/config.yml
 	dh_installinit --no-start --name statsgod
 
-.PHONY: override_dh_auto_clean override_dh_auto_build override_dh_auto_install
+.PHONY: override_dh_auto_clean override_dh_auto_build override_dh_builddeb override_dh_auto_install
