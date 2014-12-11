@@ -83,7 +83,7 @@ func main() {
 	var logger statsgod.Logger
 
 	// Load the YAML config.
-	var config, _ = statsgod.LoadConfig(*configFile)
+	var config, _ = statsgod.CreateConfig(*configFile)
 
 	var hostnameErr error
 	hostname, hostnameErr = os.Hostname()
@@ -158,22 +158,23 @@ func main() {
 
 	// Flush the metrics to the remote stats collector.
 	for i := 0; i < config.Relay.Concurrency; i++ {
-		go flushMetrics(logger, config)
+		go flushMetrics(logger, &config)
 	}
 
 	tcpAddr := fmt.Sprintf("%s:%d", config.Connection.Tcp.Host, config.Connection.Tcp.Port)
 	socketTcp := statsgod.CreateSocket(statsgod.SocketTypeTcp, tcpAddr).(*statsgod.SocketTcp)
-	go socketTcp.Listen(parseChannel, logger, config)
+	go socketTcp.Listen(parseChannel, logger, &config)
 
 	udpAddr := fmt.Sprintf("%s:%d", config.Connection.Udp.Host, config.Connection.Udp.Port)
 	socketUdp := statsgod.CreateSocket(statsgod.SocketTypeUdp, udpAddr).(*statsgod.SocketUdp)
-	go socketUdp.Listen(parseChannel, logger, config)
+	go socketUdp.Listen(parseChannel, logger, &config)
 
 	socketUnix := statsgod.CreateSocket(statsgod.SocketTypeUnix, config.Connection.Unix.File).(*statsgod.SocketUnix)
-	go socketUnix.Listen(parseChannel, logger, config)
+	go socketUnix.Listen(parseChannel, logger, &config)
 
-	// Signal handling. Any signal that should cause this program to stop needs to
-	// also do some cleanup before exiting.
+	// For signal handling we catch several signals. ABRT, INT, TERM and QUIT
+	// are all used to clean up and stop the process. HUP is used to signal
+	// a configuration reload without stopping the process.
 	signalChannel := make(chan os.Signal, 1)
 	signal.Notify(signalChannel,
 		syscall.SIGABRT,
@@ -182,9 +183,21 @@ func main() {
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 	go func() {
-		s := <-signalChannel
-		logger.Info.Printf("Processed signal %v", s)
-		finishChannel <- 1
+		for {
+			s := <-signalChannel
+			logger.Info.Printf("Processed signal %v", s)
+
+			switch s {
+			case syscall.SIGHUP:
+				// Reload the configuration.
+				logger.Info.Printf("Loading config changes from %s", *configFile)
+				config.LoadFile(*configFile)
+			default:
+				// The other signals will kill the process.
+				finishChannel <- 1
+				break
+			}
+		}
 	}()
 
 	select {
@@ -230,7 +243,7 @@ func parseMetrics(logger statsgod.Logger, auth statsgod.Auth) {
 // point we are receiving Metric structures from a channel that need to be
 // aggregated by the specified namespace. We do this immediately, then when
 // the specified flush interval passes, we send aggregated metrics to storage.
-func flushMetrics(logger statsgod.Logger, config statsgod.ConfigValues) {
+func flushMetrics(logger statsgod.Logger, config *statsgod.ConfigValues) {
 	// Use a tick channel to determine if a flush message has arrived.
 	tick := time.Tick(config.Relay.Flush)
 	logger.Info.Printf("Flushing every %v", config.Relay.Flush)
@@ -292,7 +305,7 @@ func flushAllMetrics(metrics map[string]statsgod.Metric, logger statsgod.Logger)
 }
 
 // prepareRuntimeMetrics creates key runtime metrics to monitor the health of the system.
-func prepareRuntimeMetrics(metrics map[string]statsgod.Metric, config statsgod.ConfigValues) {
+func prepareRuntimeMetrics(metrics map[string]statsgod.Metric, config *statsgod.ConfigValues) {
 	if config.Debug.Relay {
 		memStats := &runtime.MemStats{}
 		runtime.ReadMemStats(memStats)
@@ -318,7 +331,7 @@ func prepareRuntimeMetrics(metrics map[string]statsgod.Metric, config statsgod.C
 }
 
 // prepareFlushMetrics creates metrics that represent the speed and size of the flushes.
-func prepareFlushMetrics(metrics map[string]statsgod.Metric, config statsgod.ConfigValues, flushStart time.Time, flushStop time.Time, flushCount int) {
+func prepareFlushMetrics(metrics map[string]statsgod.Metric, config *statsgod.ConfigValues, flushStart time.Time, flushStop time.Time, flushCount int) {
 	if config.Debug.Relay {
 		// Prepare the duration metric.
 		durationKey := fmt.Sprintf("statsgod.%s.flush.duration", hostname)

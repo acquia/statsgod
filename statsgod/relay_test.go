@@ -36,7 +36,7 @@ var _ = Describe("Relay", func() {
 	Describe("Testing the basic structure", func() {
 		BeforeEach(func() {
 			logger = *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
-			config, _ = LoadConfig("")
+			config, _ = CreateConfig("")
 			config.Relay.Type = "mock"
 			tmpPort = StartTemporaryListener()
 		})

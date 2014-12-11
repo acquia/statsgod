@@ -50,12 +50,12 @@ var testSockets = []struct {
 var sockets = make([]Socket, 3)
 var parseChannel = make(chan string)
 var logger = *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
-var config, _ = LoadConfig("")
+var config, _ = CreateConfig("")
 
 var _ = BeforeSuite(func() {
 	for i, ts := range testSockets {
 		socket := CreateSocket(ts.socketType, ts.socketAddr)
-		go socket.Listen(parseChannel, logger, config)
+		go socket.Listen(parseChannel, logger, &config)
 		BlockForSocket(socket, time.Second)
 		sockets[i] = socket
 	}
@@ -73,7 +73,7 @@ var _ = Describe("Sockets", func() {
 		It("should contain the required functions", func() {
 			for i, _ := range testSockets {
 				_, ok := sockets[i].(interface {
-					Listen(parseChannel chan string, logger Logger, config ConfigValues)
+					Listen(parseChannel chan string, logger Logger, config *ConfigValues)
 					Close(logger Logger)
 					GetAddr() string
 					SocketIsActive() bool
@@ -125,16 +125,16 @@ var _ = Describe("Sockets", func() {
 		It("should panic if it has a bad address", func() {
 			for _, ts := range testSockets {
 				socket := CreateSocket(ts.socketType, "")
-				Expect(func() { socket.Listen(parseChannel, logger, config) }).Should(Panic())
+				Expect(func() { socket.Listen(parseChannel, logger, &config) }).Should(Panic())
 				socket = CreateSocket(ts.socketType, ts.badAddr)
-				Expect(func() { socket.Listen(parseChannel, logger, config) }).Should(Panic())
+				Expect(func() { socket.Listen(parseChannel, logger, &config) }).Should(Panic())
 			}
 		})
 
 		It("should panic if it is already listening on an address.", func() {
 			for i, ts := range testSockets {
 				socket := CreateSocket(ts.socketType, sockets[i].GetAddr())
-				Expect(func() { socket.Listen(parseChannel, logger, config) }).Should(Panic())
+				Expect(func() { socket.Listen(parseChannel, logger, &config) }).Should(Panic())
 			}
 		})
 
