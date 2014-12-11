@@ -134,6 +134,26 @@ ConfigToken checks the configuration file for a valid auth token. The config fil
 
 When sending metrics, the token is specified at the beginning of the metric namespace followed by a dot. For example, a metric "32a3c4970093.my.metric:123|g" would look in the config tokens for the string "32a3c4970093" and see if that is set to true. If valid, the process will strip the token from the namespace, only parsing and aggregating "my.metric:123|g". NOTE: since metric namespaces are dot-delimited, you cannot use a dot in a token.
 
+## Signal handling
+The statsgod service is equipped to handle the following signals:
+
+1. Shut down the sockets and clean up before exiting.
+	- SIGABRT
+	- SIGINT
+	- SIGTERM
+	- SIGQUIT
+
+2. Reload\* the configuration without restarting.
+	- SIGHUP
+
+\* When reloading configuration, not all values will affect the current runtime. The following are only available on start up and not currently reloadable:
+
+- connection.\*
+- relay.\*
+- stats.percentile
+- debug.verbose
+- debug.profile
+
 ## Development
 To download all dependencies and compile statsgod
 
