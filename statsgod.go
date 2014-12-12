@@ -140,8 +140,21 @@ func main() {
 		logger.Info.Println("Relaying metrics to mock backend")
 	}
 
+	// Set up the authentication.
+	var auth statsgod.Auth
+	switch config.Service.Auth {
+	case statsgod.AuthTypeConfigToken:
+		tokenAuth := statsgod.CreateAuth(statsgod.AuthTypeConfigToken).(*statsgod.AuthConfigToken)
+		tokenAuth.Tokens = config.Service.Tokens
+		auth = tokenAuth
+	case statsgod.AuthTypeNone:
+		fallthrough
+	default:
+		auth = statsgod.CreateAuth(statsgod.AuthTypeNone).(*statsgod.AuthNone)
+	}
+
 	// Parse the incoming messages and convert to metrics.
-	go parseMetrics(logger)
+	go parseMetrics(logger, auth)
 
 	// Flush the metrics to the remote stats collector.
 	for i := 0; i < config.Relay.Concurrency; i++ {
@@ -197,16 +210,26 @@ func main() {
 }
 
 // Parses the strings received from clients and creates Metric structures.
-func parseMetrics(logger statsgod.Logger) {
+func parseMetrics(logger statsgod.Logger, auth statsgod.Auth) {
+
+	var authOk bool
+	var authErr error
 
 	for {
 		// Process the channel as soon as requests come in. If they are valid Metric
 		// structures, we move them to a new channel to be flushed on an interval.
 		select {
 		case metricString := <-parseChannel:
+			// Authenticate the metric.
+			authOk, authErr = auth.Authenticate(&metricString)
+			if authErr != nil || !authOk {
+				logger.Error.Printf("Auth Error: %v, %s", authOk, authErr)
+				continue
+			}
+
 			metric, err := statsgod.ParseMetricString(metricString)
 			if err != nil {
-				logger.Error.Printf("Invalid metric: %v", metricString)
+				logger.Error.Printf("Invalid metric: %s, %s", metricString, err)
 				continue
 			}
 			// Push the metric onto the channel to be aggregated and flushed.

@@ -36,6 +36,8 @@ var _ = Describe("Config", func() {
 			config, _ = CreateConfig("")
 			It("should contain defaults", func() {
 				Expect(config.Service.Name).ShouldNot(Equal(nil))
+				Expect(config.Service.Auth).ShouldNot(Equal(nil))
+				Expect(config.Service.Tokens).ShouldNot(Equal(nil))
 				Expect(config.Connection.Tcp.Host).ShouldNot(Equal(nil))
 				Expect(config.Connection.Tcp.Port).ShouldNot(Equal(nil))
 				Expect(config.Connection.Udp.Host).ShouldNot(Equal(nil))
@@ -67,6 +69,8 @@ var _ = Describe("Config", func() {
 			It("should match the defaults", func() {
 				Expect(fileErr).Should(BeNil())
 				Expect(yaml.Service.Name).Should(Equal(config.Service.Name))
+				Expect(yaml.Service.Auth).Should(Equal(config.Service.Auth))
+				Expect(yaml.Service.Tokens).Should(Equal(config.Service.Tokens))
 				Expect(yaml.Connection.Tcp.Host).Should(Equal(config.Connection.Tcp.Host))
 				Expect(yaml.Connection.Tcp.Port).Should(Equal(config.Connection.Tcp.Port))
 				Expect(yaml.Connection.Udp.Host).Should(Equal(config.Connection.Udp.Host))
