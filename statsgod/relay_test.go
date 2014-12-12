@@ -68,13 +68,17 @@ var _ = Describe("Relay", func() {
 			It("should be a complete structure", func() {
 				backendRelay := CreateRelay(RelayTypeCarbon).(*CarbonRelay)
 				backendRelay.Percentile = []int{50, 75, 90}
-				backendRelay.Prefixes = backendRelay.GetPrefixes(config)
+				backendRelay.Prefixes, backendRelay.Suffixes = backendRelay.GetPrefixesAndSuffixes(config)
 				Expect(backendRelay.Prefixes["counters"]).Should(Equal("stats.counts."))
 				Expect(backendRelay.Prefixes["gauges"]).Should(Equal("stats.gauges."))
-				Expect(backendRelay.Prefixes["global"]).Should(Equal("stats."))
 				Expect(backendRelay.Prefixes["rates"]).Should(Equal("stats.rates."))
 				Expect(backendRelay.Prefixes["sets"]).Should(Equal("stats.sets."))
 				Expect(backendRelay.Prefixes["timers"]).Should(Equal("stats.timers."))
+				Expect(backendRelay.Suffixes["counters"]).Should(Equal(""))
+				Expect(backendRelay.Suffixes["gauges"]).Should(Equal(""))
+				Expect(backendRelay.Suffixes["rates"]).Should(Equal(""))
+				Expect(backendRelay.Suffixes["sets"]).Should(Equal(""))
+				Expect(backendRelay.Suffixes["timers"]).Should(Equal(""))
 				Expect(backendRelay.FlushInterval).ShouldNot(Equal(nil))
 				Expect(backendRelay.Percentile).ShouldNot(Equal(nil))
 				// At this point the connection pool has not been established.
@@ -96,6 +100,23 @@ var _ = Describe("Relay", func() {
 					metric, _ = ParseMetricString(testMetric)
 					backendRelay.Relay(*metric, logger)
 				}
+
+				// Test prefixes and suffixes.
+				backendRelay.Prefixes["counters"] = "p.c."
+				backendRelay.Prefixes["gauges"] = "p.g."
+				backendRelay.Prefixes["rates"] = "p.r."
+				backendRelay.Prefixes["sets"] = "p.s."
+				backendRelay.Prefixes["timers"] = "p.t."
+				backendRelay.Suffixes["counters"] = ".c.s"
+				backendRelay.Suffixes["gauges"] = ".g.s"
+				backendRelay.Suffixes["rates"] = ".r.s"
+				backendRelay.Suffixes["sets"] = ".s.s"
+				backendRelay.Suffixes["timers"] = ".t.s"
+				Expect(backendRelay.ApplyPrefixAndSuffix("m", NamespaceTypeCounter)).Should(Equal("p.c.m.c.s"))
+				Expect(backendRelay.ApplyPrefixAndSuffix("m", NamespaceTypeGauge)).Should(Equal("p.g.m.g.s"))
+				Expect(backendRelay.ApplyPrefixAndSuffix("m", NamespaceTypeRate)).Should(Equal("p.r.m.r.s"))
+				Expect(backendRelay.ApplyPrefixAndSuffix("m", NamespaceTypeSet)).Should(Equal("p.s.m.s.s"))
+				Expect(backendRelay.ApplyPrefixAndSuffix("m", NamespaceTypeTimer)).Should(Equal("p.t.m.t.s"))
 
 				// Test a broken relay.
 				StopTemporaryListener()
