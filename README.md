@@ -94,6 +94,26 @@ Statsgod provides support for the following metric types:
 		# flush produces a single value counting the unique metrics sent:
 		[set prefix].my.unique [timestamp] 2
 
+## Signal handling
+The statsgod service is equipped to handle the following signals:
+
+1. Shut down the sockets and clean up before exiting.
+	- SIGABRT
+	- SIGINT
+	- SIGTERM
+	- SIGQUIT
+
+2. Reload\* the configuration without restarting.
+	- SIGHUP
+
+\* When reloading configuration, not all values will affect the current runtime. The following are only available on start up and not currently reloadable:
+
+- connection.\*
+- relay.\*
+- stats.percentile
+- debug.verbose
+- debug.profile
+
 ## Development
 To download all dependencies and compile statsgod
 
