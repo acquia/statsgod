@@ -39,6 +39,7 @@ var concurrency = flag.Int("concurrency", 1, "How many concurrent generators to 
 var runTime = flag.Duration("runTime", 30*time.Second, "How long to run the test.")
 var connType = flag.Int("connType", 0, "0 for all, 1 for TCP, 2 for TCP Pool, 3 for UDP, 4 for Unix, 5 for Unix Pool.")
 var logSent = flag.Bool("logSent", false, "Log each metric sent.")
+var token = flag.String("token", "", "An auth token to prepend to the metric string.")
 
 // Metric is our main data type.
 type Metric struct {
@@ -87,10 +88,16 @@ func main() {
 	finishChannel := make(chan int)
 	flushChannel := make(chan Metric)
 
+	// If the user specified an auth token, construct it here.
+	metricToken := ""
+	if *token != "" {
+		metricToken = *token + "."
+	}
+
 	// Establish threads to send data concurrently.
 	for i := 0; i < *concurrency; i++ {
 		var store = make([]Metric, 0)
-		store = generateMetricNames(*numMetrics, store)
+		store = generateMetricNames(*numMetrics, store, metricToken)
 		go sendTestMetrics(store, flushChannel, finishChannel)
 		go flushMetrics(flushChannel, finishChannel)
 	}
@@ -161,7 +168,7 @@ func flushMetrics(flushChannel chan Metric, finishChannel chan int) {
 }
 
 // generateMetricNames generates a specified number of random metric types.
-func generateMetricNames(numMetrics int, store []Metric) []Metric {
+func generateMetricNames(numMetrics int, store []Metric, metricToken string) []Metric {
 	metricTypes := []string{
 		"c",
 		"g",
@@ -174,7 +181,7 @@ func generateMetricNames(numMetrics int, store []Metric) []Metric {
 
 	for i := 0; i < numMetrics; i++ {
 		newMetricName, _ := randutil.String(20, randutil.Alphabet)
-		newMetricNS := fmt.Sprintf("statsgod.test.%s", newMetricName)
+		newMetricNS := fmt.Sprintf("%sstatsgod.test.%s", metricToken, newMetricName)
 		newMetricCT := 1
 		if *connType > 0 && *connType < 6 {
 			newMetricCT = *connType
