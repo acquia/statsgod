@@ -25,14 +25,15 @@ import (
 var _ = Describe("Config", func() {
 
 	var (
-		config  ConfigValues
-		yaml    ConfigValues
-		fileErr error
+		config            ConfigValues
+		yaml              ConfigValues
+		fileErr           error
+		exampleConfigFile string = "../example.config.yml"
 	)
 
 	Describe("Loading runtime configuration", func() {
 		Context("Loading default values", func() {
-			config, _ = LoadConfig("")
+			config, _ = CreateConfig("")
 			It("should contain defaults", func() {
 				Expect(config.Service.Name).ShouldNot(Equal(nil))
 				Expect(config.Connection.Tcp.Host).ShouldNot(Equal(nil))
@@ -56,7 +57,7 @@ var _ = Describe("Config", func() {
 		})
 
 		Context("Loading config file", func() {
-			yaml, fileErr = LoadConfig("../example.config.yml")
+			yaml, fileErr = CreateConfig(exampleConfigFile)
 			It("should match the defaults", func() {
 				Expect(fileErr).Should(BeNil())
 				Expect(yaml.Service.Name).Should(Equal(config.Service.Name))
@@ -83,8 +84,18 @@ var _ = Describe("Config", func() {
 
 		Context("Loading bogus file", func() {
 			It("should throw an error", func() {
-				_, noFileErr := LoadConfig("noFile")
+				_, noFileErr := CreateConfig("noFile")
 				Expect(noFileErr).ShouldNot(Equal(nil))
+			})
+		})
+
+		Context("Re-loading file", func() {
+			It("should update the values", func() {
+				runtimeConf, _ := CreateConfig(exampleConfigFile)
+				originalName := runtimeConf.Service.Name
+				runtimeConf.Service.Name = "SomethingNew"
+				runtimeConf.LoadFile(exampleConfigFile)
+				Expect(runtimeConf.Service.Name).Should(Equal(originalName))
 			})
 		})
 	})

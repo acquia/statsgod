@@ -101,7 +101,7 @@ func (c CarbonRelay) Relay(metric Metric, logger Logger) bool {
 			gkey = fmt.Sprintf("stats.timers.%s.mean_%d", metric.Key, q.Quantile)
 			sendCarbonMetric(gkey, q.Mean, stringTime, true, c, logger)
 
-			gkey = fmt.Sprintf("stats.timers.%s.median%d", metric.Key, q.Quantile)
+			gkey = fmt.Sprintf("stats.timers.%s.median_%d", metric.Key, q.Quantile)
 			sendCarbonMetric(gkey, q.Median, stringTime, true, c, logger)
 
 			gkey = fmt.Sprintf("stats.timers.%s.upper_%d", metric.Key, q.Quantile)
