@@ -68,13 +68,17 @@ var _ = Describe("Relay", func() {
 			It("should be a complete structure", func() {
 				backendRelay := CreateRelay(RelayTypeCarbon).(*CarbonRelay)
 				backendRelay.Percentile = []int{50, 75, 90}
-				backendRelay.Prefixes = backendRelay.GetPrefixes(config)
-				Expect(backendRelay.Prefixes["counters"]).Should(Equal("stats.counts."))
-				Expect(backendRelay.Prefixes["gauges"]).Should(Equal("stats.gauges."))
-				Expect(backendRelay.Prefixes["global"]).Should(Equal("stats."))
-				Expect(backendRelay.Prefixes["rates"]).Should(Equal("stats.rates."))
-				Expect(backendRelay.Prefixes["sets"]).Should(Equal("stats.sets."))
-				Expect(backendRelay.Prefixes["timers"]).Should(Equal("stats.timers."))
+				backendRelay.SetPrefixesAndSuffixes(config)
+				Expect(backendRelay.Prefixes[NamespaceTypeCounter]).Should(Equal("stats.counts."))
+				Expect(backendRelay.Prefixes[NamespaceTypeGauge]).Should(Equal("stats.gauges."))
+				Expect(backendRelay.Prefixes[NamespaceTypeRate]).Should(Equal("stats.rates."))
+				Expect(backendRelay.Prefixes[NamespaceTypeSet]).Should(Equal("stats.sets."))
+				Expect(backendRelay.Prefixes[NamespaceTypeTimer]).Should(Equal("stats.timers."))
+				Expect(backendRelay.Suffixes[NamespaceTypeCounter]).Should(Equal(""))
+				Expect(backendRelay.Suffixes[NamespaceTypeGauge]).Should(Equal(""))
+				Expect(backendRelay.Suffixes[NamespaceTypeRate]).Should(Equal(""))
+				Expect(backendRelay.Suffixes[NamespaceTypeSet]).Should(Equal(""))
+				Expect(backendRelay.Suffixes[NamespaceTypeTimer]).Should(Equal(""))
 				Expect(backendRelay.FlushInterval).ShouldNot(Equal(nil))
 				Expect(backendRelay.Percentile).ShouldNot(Equal(nil))
 				// At this point the connection pool has not been established.
@@ -96,6 +100,26 @@ var _ = Describe("Relay", func() {
 					metric, _ = ParseMetricString(testMetric)
 					backendRelay.Relay(*metric, logger)
 				}
+
+				// Test prefixes and suffixes.
+				config.Namespace.Prefix = "p"
+				config.Namespace.Prefixes.Counters = "c"
+				config.Namespace.Prefixes.Gauges = "g"
+				config.Namespace.Prefixes.Rates = "r"
+				config.Namespace.Prefixes.Sets = "s"
+				config.Namespace.Prefixes.Timers = "t"
+				config.Namespace.Suffix = "s"
+				config.Namespace.Suffixes.Counters = "c"
+				config.Namespace.Suffixes.Gauges = "g"
+				config.Namespace.Suffixes.Rates = "r"
+				config.Namespace.Suffixes.Sets = "s"
+				config.Namespace.Suffixes.Timers = "t"
+				backendRelay.SetPrefixesAndSuffixes(config)
+				Expect(backendRelay.ApplyPrefixAndSuffix("m", NamespaceTypeCounter)).Should(Equal("p.c.m.c.s"))
+				Expect(backendRelay.ApplyPrefixAndSuffix("m", NamespaceTypeGauge)).Should(Equal("p.g.m.g.s"))
+				Expect(backendRelay.ApplyPrefixAndSuffix("m", NamespaceTypeRate)).Should(Equal("p.r.m.r.s"))
+				Expect(backendRelay.ApplyPrefixAndSuffix("m", NamespaceTypeSet)).Should(Equal("p.s.m.s.s"))
+				Expect(backendRelay.ApplyPrefixAndSuffix("m", NamespaceTypeTimer)).Should(Equal("p.t.m.t.s"))
 
 				// Test a broken relay.
 				StopTemporaryListener()

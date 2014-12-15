@@ -63,20 +63,30 @@ type ConfigValues struct {
 		Timeout     time.Duration
 		Flush       time.Duration
 	}
+	Namespace struct {
+		Prefix   string
+		Prefixes struct {
+			Counters string
+			Gauges   string
+			Rates    string
+			Sets     string
+			Timers   string
+		}
+		Suffix   string
+		Suffixes struct {
+			Counters string
+			Gauges   string
+			Rates    string
+			Sets     string
+			Timers   string
+		}
+	}
 	Carbon struct {
 		Host string
 		Port int
 	}
 	Stats struct {
 		Percentile []int
-		Prefix     struct {
-			Counters string
-			Gauges   string
-			Global   string
-			Rates    string
-			Sets     string
-			Timers   string
-		}
 	}
 	Debug struct {
 		Verbose bool
@@ -98,27 +108,45 @@ func (config *ConfigValues) LoadFile(filePath string) error {
 	var err error
 
 	// Establish all of the default values.
+
+	// Service
 	config.Service.Name = "statsgod"
 	config.Service.Debug = false
 	config.Service.Auth = "none"
+
+	// Connection
 	config.Connection.Tcp.Host = "127.0.0.1"
 	config.Connection.Tcp.Port = 8125
 	config.Connection.Udp.Host = "127.0.0.1"
 	config.Connection.Udp.Port = 8126
 	config.Connection.Udp.Maxpacket = 1024
 	config.Connection.Unix.File = "/var/run/statsgod/statsgod.sock"
+
+	// Relay
 	config.Relay.Type = RelayTypeCarbon
 	config.Relay.Concurrency = 1
 	config.Relay.Timeout = 30 * time.Second
 	config.Relay.Flush = 10 * time.Second
+
+	// Carbon
 	config.Carbon.Host = "127.0.0.1"
 	config.Carbon.Port = 2003
-	config.Stats.Prefix.Counters = "counts"
-	config.Stats.Prefix.Gauges = "gauges"
-	config.Stats.Prefix.Global = "stats"
-	config.Stats.Prefix.Rates = "rates"
-	config.Stats.Prefix.Sets = "sets"
-	config.Stats.Prefix.Timers = "timers"
+
+	// Namespace
+	config.Namespace.Prefix = "stats"
+	config.Namespace.Prefixes.Counters = "counts"
+	config.Namespace.Prefixes.Gauges = "gauges"
+	config.Namespace.Prefixes.Rates = "rates"
+	config.Namespace.Prefixes.Sets = "sets"
+	config.Namespace.Prefixes.Timers = "timers"
+	config.Namespace.Suffix = ""
+	config.Namespace.Suffixes.Counters = ""
+	config.Namespace.Suffixes.Gauges = ""
+	config.Namespace.Suffixes.Rates = ""
+	config.Namespace.Suffixes.Sets = ""
+	config.Namespace.Suffixes.Timers = ""
+
+	// Debug
 	config.Debug.Verbose = false
 	config.Debug.Receipt = false
 	config.Debug.Profile = false
