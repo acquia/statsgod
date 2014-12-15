@@ -25,16 +25,19 @@ import (
 var _ = Describe("Config", func() {
 
 	var (
-		config  ConfigValues
-		yaml    ConfigValues
-		fileErr error
+		config            ConfigValues
+		yaml              ConfigValues
+		fileErr           error
+		exampleConfigFile string = "../example.config.yml"
 	)
 
 	Describe("Loading runtime configuration", func() {
 		Context("Loading default values", func() {
-			config, _ = LoadConfig("")
+			config, _ = CreateConfig("")
 			It("should contain defaults", func() {
 				Expect(config.Service.Name).ShouldNot(Equal(nil))
+				Expect(config.Service.Auth).ShouldNot(Equal(nil))
+				Expect(config.Service.Tokens).ShouldNot(Equal(nil))
 				Expect(config.Connection.Tcp.Host).ShouldNot(Equal(nil))
 				Expect(config.Connection.Tcp.Port).ShouldNot(Equal(nil))
 				Expect(config.Connection.Udp.Host).ShouldNot(Equal(nil))
@@ -48,6 +51,12 @@ var _ = Describe("Config", func() {
 				Expect(config.Carbon.Host).ShouldNot(Equal(nil))
 				Expect(config.Carbon.Port).ShouldNot(Equal(nil))
 				Expect(config.Stats.Percentile).ShouldNot(Equal(nil))
+				Expect(config.Stats.Prefix.Counters).ShouldNot(Equal(nil))
+				Expect(config.Stats.Prefix.Gauges).ShouldNot(Equal(nil))
+				Expect(config.Stats.Prefix.Global).ShouldNot(Equal(nil))
+				Expect(config.Stats.Prefix.Rates).ShouldNot(Equal(nil))
+				Expect(config.Stats.Prefix.Sets).ShouldNot(Equal(nil))
+				Expect(config.Stats.Prefix.Timers).ShouldNot(Equal(nil))
 				Expect(config.Debug.Verbose).ShouldNot(Equal(nil))
 				Expect(config.Debug.Receipt).ShouldNot(Equal(nil))
 				Expect(config.Debug.Profile).ShouldNot(Equal(nil))
@@ -56,10 +65,12 @@ var _ = Describe("Config", func() {
 		})
 
 		Context("Loading config file", func() {
-			yaml, fileErr = LoadConfig("../example.config.yml")
+			yaml, fileErr = CreateConfig(exampleConfigFile)
 			It("should match the defaults", func() {
 				Expect(fileErr).Should(BeNil())
 				Expect(yaml.Service.Name).Should(Equal(config.Service.Name))
+				Expect(yaml.Service.Auth).Should(Equal(config.Service.Auth))
+				Expect(yaml.Service.Tokens).Should(Equal(config.Service.Tokens))
 				Expect(yaml.Connection.Tcp.Host).Should(Equal(config.Connection.Tcp.Host))
 				Expect(yaml.Connection.Tcp.Port).Should(Equal(config.Connection.Tcp.Port))
 				Expect(yaml.Connection.Udp.Host).Should(Equal(config.Connection.Udp.Host))
@@ -73,6 +84,12 @@ var _ = Describe("Config", func() {
 				Expect(yaml.Carbon.Host).Should(Equal(config.Carbon.Host))
 				Expect(yaml.Carbon.Port).Should(Equal(config.Carbon.Port))
 				Expect(yaml.Stats.Percentile).Should(Equal(config.Stats.Percentile))
+				Expect(yaml.Stats.Prefix.Counters).Should(Equal(config.Stats.Prefix.Counters))
+				Expect(yaml.Stats.Prefix.Gauges).Should(Equal(config.Stats.Prefix.Gauges))
+				Expect(yaml.Stats.Prefix.Global).Should(Equal(config.Stats.Prefix.Global))
+				Expect(yaml.Stats.Prefix.Rates).Should(Equal(config.Stats.Prefix.Rates))
+				Expect(yaml.Stats.Prefix.Sets).Should(Equal(config.Stats.Prefix.Sets))
+				Expect(yaml.Stats.Prefix.Timers).Should(Equal(config.Stats.Prefix.Timers))
 				Expect(yaml.Debug.Verbose).Should(Equal(config.Debug.Verbose))
 				Expect(yaml.Debug.Receipt).Should(Equal(config.Debug.Receipt))
 				Expect(yaml.Debug.Profile).Should(Equal(config.Debug.Profile))
@@ -83,8 +100,18 @@ var _ = Describe("Config", func() {
 
 		Context("Loading bogus file", func() {
 			It("should throw an error", func() {
-				_, noFileErr := LoadConfig("noFile")
+				_, noFileErr := CreateConfig("noFile")
 				Expect(noFileErr).ShouldNot(Equal(nil))
+			})
+		})
+
+		Context("Re-loading file", func() {
+			It("should update the values", func() {
+				runtimeConf, _ := CreateConfig(exampleConfigFile)
+				originalName := runtimeConf.Service.Name
+				runtimeConf.Service.Name = "SomethingNew"
+				runtimeConf.LoadFile(exampleConfigFile)
+				Expect(runtimeConf.Service.Name).Should(Equal(originalName))
 			})
 		})
 	})
