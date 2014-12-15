@@ -62,8 +62,8 @@ Statsgod provides support for the following metric types.
 		my.counter:1|c
 		my.counter:1|c
 		# flush produces a count and a rate:
-		[stats prefix].my.counter [timestamp] 3
-		[rate prefix].my.counter [timestamp] [3/(duration of flush interval in seconds)]
+		[prefix].my.counter.[suffix] [timestamp] 3
+		[prefix].my.counter.[suffix] [timestamp] [3/(duration of flush interval in seconds)]
 
 2. Gauges - these are a "last in" measurement which discards all previously sent values:
 
@@ -71,7 +71,7 @@ Statsgod provides support for the following metric types.
 		my.gauge:2|g
 		my.gauge:3|g
 		# flush only sends the last value:
-		[gauge prefix].my.gauge [timestamp] 3
+		[prefix].my.gauge.[suffix] [timestamp] 3
 
 3. Timers - these are timed values measured in milliseconds. Statsgod provides several calculated values based on the sent metrics:
 
@@ -79,13 +79,13 @@ Statsgod provides support for the following metric types.
 		my.timer:200|ms
 		my.timer:300|ms
 		# flush produces several calculated fields:
-		[timer prefix].my.timer.mean_value [timestamp] [mean]
-		[timer prefix].my.timer.median_value [timestamp] [median]
-		[timer prefix].my.timer.min_value [timestamp] [min]
-		[timer prefix].my.timer.max_value [timestamp] [max]
-		[timer prefix].my.timer.mean_90 [timestamp] [mean in 90th percentile]
-		[timer prefix].my.timer.upper_90 [timestamp] [upper in 90th percentile]
-		[timer prefix].my.timer.sum_90 [timestamp] [sum in 90th percentile]
+		[prefix].my.timer.mean_value.[suffix] [timestamp] [mean]
+		[prefix].my.timer.median_value.[suffix] [timestamp] [median]
+		[prefix].my.timer.min_value.[suffix] [timestamp] [min]
+		[prefix].my.timer.max_value.[suffix] [timestamp] [max]
+		[prefix].my.timer.mean_90.[suffix] [timestamp] [mean in 90th percentile]
+		[prefix].my.timer.upper_90.[suffix] [timestamp] [upper in 90th percentile]
+		[prefix].my.timer.sum_90.[suffix] [timestamp] [sum in 90th percentile]
 
 4. Sets - these track the number of unique values sent during a flush interval:
 
@@ -94,18 +94,26 @@ Statsgod provides support for the following metric types.
 		my.unique:2|s
 		my.unique:1|s
 		# flush produces a single value counting the unique metrics sent:
-		[set prefix].my.unique [timestamp] 2
+		[prefix].my.unique.[suffix] [timestamp] 2
 
-Note that the prefixes noted above can be customized in the configuration. Prefixes will render as [global].[type].[metric namespace]. You may also use empty strings in the config if you do not wish statsgod to prefix before relaying.
+## Prefix/Suffix
+Prefixes and suffixes noted above can be customized in the configuration. Metrics will render as [prefix].[type prefix].[metric namespace].[type suffix].[suffix]. You may also use empty strings in the config for any values you do not wish statsgod to prefix/suffix before relaying.
 
-	stats:
-		prefix:
+	namespace:
+		prefix: "stats"
+		prefixes:
 			counters: "counts"
 			gauges: "gauges"
-			global: "stats"
 			rates: "rates"
 			sets: "sets"
 			timers: "timers"
+		suffix: ""
+		suffixes:
+			counters: ""
+			gauges: ""
+			rates: ""
+			sets: ""
+			timers: ""
 
 
 
