@@ -32,27 +32,30 @@ Client code can send metrics via any one of three sockets which listen concurren
 1. TCP
 	- Allows multiple metrics to be sent over a connection, separated by a newline character.
 	- Connection will remain open until closed by the client.
-	- Host and port are configurable
+	- Config:
+		- connection.udp.host
+		- connection.udp.port
 
 2. UDP
 	- Allows multiple metrics to be sent over a connection, separated by a newline character. Note, you should be careful to not exceed the maximum packet size (default 1024 bytes).
-	- Max packet size is configurable.
-	- Host and port are configurable
+	- Config:
+		- connection.udp.host
+		- connection.udp.port
+		- connection.udp.maxpacket (buffer size to read incoming packets)
 
 3. Unix Domain Socket
 	- Allows multiple metrics to be sent over a connection, separated by a newline character.
 	- Connection will remain open until closed by the client.
-	- Sock file is configurable
+	- Config:
+		- config: connection.unix.file (path to the sock file)
 
 ## Configuration
 All runtime options are specified in a YAML file. Please see example.config.yml for defaults. e.g.
 
 	go run statsgod.go -config=/etc/statsgod.yml
 
-See config.yml for an example with all default/configurable values.
-
 ## Stats Types
-Statsgod provides support for the following metric types:
+Statsgod provides support for the following metric types.
 
 1. Counters - these are cumulative values that calculate the sum of all metrics sent. A rate is also calculated to determine how many values were sent during the flush interval:
 
@@ -93,6 +96,63 @@ Statsgod provides support for the following metric types:
 		my.unique:1|s
 		# flush produces a single value counting the unique metrics sent:
 		[set prefix].my.unique [timestamp] 2
+
+Note that the prefixes noted above can be customized in the configuration. Prefixes will render as [global].[type].[metric namespace]. You may also use empty strings in the config if you do not wish statsgod to prefix before relaying.
+
+	stats:
+		prefix:
+			counters: "counts"
+			gauges: "gauges"
+			global: "stats"
+			rates: "rates"
+			sets: "sets"
+			timers: "timers"
+
+
+
+## Authentication
+Auth is handled via the statsgod.Auth interface. Currently there are two types of authentication: no-auth and token-auth, which are specified in the configuration file:
+
+1. No auth
+
+		# config.yml
+		service:
+			auth: "None"
+
+Works as you might expect, all metrics strings are parsed without authentication or manipulation. This is the default behavior.
+
+2. Token auth
+
+		# config.yml
+		service:
+			auth: "ConfigToken"
+			tokens:
+				"token-name": false
+				"32a3c4970093": true
+
+ConfigToken checks the configuration file for a valid auth token. The config file may specify as many tokens as needed in the service.tokens map. These are written as "string": bool where the string is the token and the bool is whether or not the token is valid. Please note that these are read into memory when the proces is started, so changes to the token map require a restart.
+
+When sending metrics, the token is specified at the beginning of the metric namespace followed by a dot. For example, a metric "32a3c4970093.my.metric:123|g" would look in the config tokens for the string "32a3c4970093" and see if that is set to true. If valid, the process will strip the token from the namespace, only parsing and aggregating "my.metric:123|g". NOTE: since metric namespaces are dot-delimited, you cannot use a dot in a token.
+
+## Signal handling
+The statsgod service is equipped to handle the following signals:
+
+1. Shut down the sockets and clean up before exiting.
+	- SIGABRT
+	- SIGINT
+	- SIGTERM
+	- SIGQUIT
+
+2. Reload\* the configuration without restarting.
+	- SIGHUP
+
+\* When reloading configuration, not all values will affect the current runtime. The following are only available on start up and not currently reloadable:
+
+- connection.\*
+- relay.\*
+- stats.percentile
+- debug.verbose
+- debug.profile
 
 ## Development
 To download all dependencies and compile statsgod

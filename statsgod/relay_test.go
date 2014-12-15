@@ -30,11 +30,14 @@ var _ = Describe("Relay", func() {
 	var (
 		tmpPort int
 		logger  Logger
+		config  ConfigValues
 	)
 
 	Describe("Testing the basic structure", func() {
 		BeforeEach(func() {
 			logger = *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
+			config, _ = CreateConfig("")
+			config.Relay.Type = "mock"
 			tmpPort = StartTemporaryListener()
 		})
 
@@ -65,6 +68,13 @@ var _ = Describe("Relay", func() {
 			It("should be a complete structure", func() {
 				backendRelay := CreateRelay(RelayTypeCarbon).(*CarbonRelay)
 				backendRelay.Percentile = []int{50, 75, 90}
+				backendRelay.Prefixes = backendRelay.GetPrefixes(config)
+				Expect(backendRelay.Prefixes["counters"]).Should(Equal("stats.counts."))
+				Expect(backendRelay.Prefixes["gauges"]).Should(Equal("stats.gauges."))
+				Expect(backendRelay.Prefixes["global"]).Should(Equal("stats."))
+				Expect(backendRelay.Prefixes["rates"]).Should(Equal("stats.rates."))
+				Expect(backendRelay.Prefixes["sets"]).Should(Equal("stats.sets."))
+				Expect(backendRelay.Prefixes["timers"]).Should(Equal("stats.timers."))
 				Expect(backendRelay.FlushInterval).ShouldNot(Equal(nil))
 				Expect(backendRelay.Percentile).ShouldNot(Equal(nil))
 				// At this point the connection pool has not been established.

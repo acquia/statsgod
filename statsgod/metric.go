@@ -122,7 +122,7 @@ func ParseMetricString(metricString string) (*Metric, error) {
 	}
 
 	// The string was successfully parsed. Convert to a Metric structure.
-	metric.Key = strings.TrimSpace(split1[0])
+	metric.Key = split1[0]
 	metric.MetricType = MetricType
 	metric.LastValue = parsedValue
 	metric.AllValues = append(metric.AllValues, metric.LastValue)

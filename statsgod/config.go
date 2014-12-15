@@ -24,16 +24,24 @@ import (
 )
 
 // ConfigValues describes the data type that configuration is loaded into. The
-// values from the config file map directly to these values. e.g.
-//   service:
-//       name: statsgod
-//       debug: true
+// values from the YAML config file map directly to these values. e.g.
+//
+// service:
+//     name: statsgod
+//     debug: false
+//
+// Map to:
+// config.Service.Name = "statsgod"
+// config.Service.Debug = false
+//
 // All values specified in the ConfigValues struct should also have a default
-// value set in LoadConfig() to ensure a safe runtime environment.
+// value set in LoadFile() to ensure a safe runtime environment.
 type ConfigValues struct {
 	Service struct {
-		Name  string
-		Debug bool
+		Name   string
+		Debug  bool
+		Auth   string
+		Tokens map[string]bool
 	}
 	Connection struct {
 		Tcp struct {
@@ -61,6 +69,14 @@ type ConfigValues struct {
 	}
 	Stats struct {
 		Percentile []int
+		Prefix     struct {
+			Counters string
+			Gauges   string
+			Global   string
+			Rates    string
+			Sets     string
+			Timers   string
+		}
 	}
 	Debug struct {
 		Verbose bool
@@ -70,11 +86,21 @@ type ConfigValues struct {
 	}
 }
 
-// LoadConfig will read configuration from a specified file.
-func LoadConfig(filePath string) (config ConfigValues, err error) {
+// CreateConfig is a factory for creating ConfigValues.
+func CreateConfig(filePath string) (ConfigValues, error) {
+	config := new(ConfigValues)
+	err := config.LoadFile(filePath)
+	return *config, err
+}
+
+// LoadFile will read configuration from a specified file.
+func (config *ConfigValues) LoadFile(filePath string) error {
+	var err error
+
 	// Establish all of the default values.
 	config.Service.Name = "statsgod"
 	config.Service.Debug = false
+	config.Service.Auth = "none"
 	config.Connection.Tcp.Host = "127.0.0.1"
 	config.Connection.Tcp.Port = 8125
 	config.Connection.Udp.Host = "127.0.0.1"
@@ -87,6 +113,12 @@ func LoadConfig(filePath string) (config ConfigValues, err error) {
 	config.Relay.Flush = 10 * time.Second
 	config.Carbon.Host = "127.0.0.1"
 	config.Carbon.Port = 2003
+	config.Stats.Prefix.Counters = "counts"
+	config.Stats.Prefix.Gauges = "gauges"
+	config.Stats.Prefix.Global = "stats"
+	config.Stats.Prefix.Rates = "rates"
+	config.Stats.Prefix.Sets = "sets"
+	config.Stats.Prefix.Timers = "timers"
 	config.Debug.Verbose = false
 	config.Debug.Receipt = false
 	config.Debug.Profile = false
@@ -108,5 +140,11 @@ func LoadConfig(filePath string) (config ConfigValues, err error) {
 		config.Stats.Percentile = []int{80}
 	}
 
-	return
+	// Similarly with the tokens, which is a map, only create a default if
+	// one was not read in from the yaml.
+	if len(config.Service.Tokens) == 0 {
+		config.Service.Tokens = map[string]bool{"token-name": false}
+	}
+
+	return err
 }
