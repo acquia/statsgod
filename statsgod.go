@@ -123,7 +123,7 @@ func main() {
 		relay := statsgod.CreateRelay(statsgod.RelayTypeCarbon).(*statsgod.CarbonRelay)
 		relay.FlushInterval = config.Relay.Flush
 		relay.Percentile = config.Stats.Percentile
-		relay.Prefixes = relay.GetPrefixes(config)
+		relay.Prefixes, relay.Suffixes = relay.GetPrefixesAndSuffixes(config)
 		// Create a connection pool for the relay to use.
 		pool, err := statsgod.CreateConnectionPool(config.Relay.Concurrency, fmt.Sprintf("%s:%d", config.Carbon.Host, config.Carbon.Port), statsgod.ConnPoolTypeTcp, config.Relay.Timeout, logger)
 		checkError(err, "Creating connection pool", true)

@@ -97,26 +97,6 @@ Statsgod provides support for the following metric types.
 		# flush produces a single value counting the unique metrics sent:
 		[set prefix].my.unique [timestamp] 2
 
-## Signal handling
-The statsgod service is equipped to handle the following signals:
-
-1. Shut down the sockets and clean up before exiting.
-	- SIGABRT
-	- SIGINT
-	- SIGTERM
-	- SIGQUIT
-
-2. Reload\* the configuration without restarting.
-	- SIGHUP
-
-\* When reloading configuration, not all values will affect the current runtime. The following are only available on start up and not currently reloadable:
-
-- connection.\*
-- relay.\*
-- stats.percentile
-- debug.verbose
-- debug.profile
-
 Note that the prefixes noted above can be customized in the configuration. Prefixes will render as [global].[type].[metric namespace]. You may also use empty strings in the config if you do not wish statsgod to prefix before relaying.
 
 	stats:
@@ -127,6 +107,8 @@ Note that the prefixes noted above can be customized in the configuration. Prefi
 			rates: "rates"
 			sets: "sets"
 			timers: "timers"
+
+
 
 ## Authentication
 Auth is handled via the statsgod.Auth interface. Currently there are two types of authentication: no-auth and token-auth, which are specified in the configuration file:
@@ -151,6 +133,26 @@ Works as you might expect, all metrics strings are parsed without authentication
 ConfigToken checks the configuration file for a valid auth token. The config file may specify as many tokens as needed in the service.tokens map. These are written as "string": bool where the string is the token and the bool is whether or not the token is valid. Please note that these are read into memory when the proces is started, so changes to the token map require a restart.
 
 When sending metrics, the token is specified at the beginning of the metric namespace followed by a dot. For example, a metric "32a3c4970093.my.metric:123|g" would look in the config tokens for the string "32a3c4970093" and see if that is set to true. If valid, the process will strip the token from the namespace, only parsing and aggregating "my.metric:123|g". NOTE: since metric namespaces are dot-delimited, you cannot use a dot in a token.
+
+## Signal handling
+The statsgod service is equipped to handle the following signals:
+
+1. Shut down the sockets and clean up before exiting.
+	- SIGABRT
+	- SIGINT
+	- SIGTERM
+	- SIGQUIT
+
+2. Reload\* the configuration without restarting.
+	- SIGHUP
+
+\* When reloading configuration, not all values will affect the current runtime. The following are only available on start up and not currently reloadable:
+
+- connection.\*
+- relay.\*
+- stats.percentile
+- debug.verbose
+- debug.profile
 
 ## Development
 To download all dependencies and compile statsgod

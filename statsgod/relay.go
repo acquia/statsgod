@@ -31,6 +31,16 @@ const (
 	RelayTypeCarbon = "carbon"
 	// RelayTypeMock is an enum describing a mock backend relay.
 	RelayTypeMock = "mock"
+	// NamespaceTypeCounter
+	NamespaceTypeCounter = "counters"
+	// NamespaceTypeGauge
+	NamespaceTypeGauge = "gauges"
+	// NamespaceTypeRate
+	NamespaceTypeRate = "rates"
+	// NamespaceTypeSet
+	NamespaceTypeSet = "sets"
+	// NamespaceTypeTimer
+	NamespaceTypeTimer = "timers"
 )
 
 // MetricRelay defines the interface for a back end implementation.
@@ -55,38 +65,63 @@ type CarbonRelay struct {
 	Percentile     []int
 	ConnectionPool *ConnectionPool
 	Prefixes       map[string]string
+	Suffixes       map[string]string
 }
 
 // SetPrefixes is a helper to set up the prefixes used when relaying data.
-func (c CarbonRelay) GetPrefixes(config ConfigValues) map[string]string {
-	prefixes := map[string]string{
-		"counters": "",
-		"gauges":   "",
-		"global":   "",
-		"rates":    "",
-		"sets":     "",
-		"timers":   "",
-	}
-	if config.Stats.Prefix.Global != "" {
-		prefixes["global"] = config.Stats.Prefix.Global + "."
-	}
-	if config.Stats.Prefix.Counters != "" {
-		prefixes["counters"] = prefixes["global"] + config.Stats.Prefix.Counters + "."
-	}
-	if config.Stats.Prefix.Gauges != "" {
-		prefixes["gauges"] = prefixes["global"] + config.Stats.Prefix.Gauges + "."
-	}
-	if config.Stats.Prefix.Rates != "" {
-		prefixes["rates"] = prefixes["global"] + config.Stats.Prefix.Rates + "."
-	}
-	if config.Stats.Prefix.Sets != "" {
-		prefixes["sets"] = prefixes["global"] + config.Stats.Prefix.Sets + "."
-	}
-	if config.Stats.Prefix.Timers != "" {
-		prefixes["timers"] = prefixes["global"] + config.Stats.Prefix.Timers + "."
+func (c CarbonRelay) GetPrefixesAndSuffixes(config ConfigValues) (map[string]string, map[string]string) {
+	prefix := ""
+	suffix := ""
+	prefixes := map[string]string{}
+	suffixes := map[string]string{}
+
+	configPrefixes := map[string]string{
+		NamespaceTypeCounter: config.Namespace.Prefixes.Counters,
+		NamespaceTypeGauge:   config.Namespace.Prefixes.Gauges,
+		NamespaceTypeRate:    config.Namespace.Prefixes.Rates,
+		NamespaceTypeSet:     config.Namespace.Prefixes.Sets,
+		NamespaceTypeTimer:   config.Namespace.Prefixes.Timers,
 	}
 
-	return prefixes
+	configSuffixes := map[string]string{
+		NamespaceTypeCounter: config.Namespace.Suffixes.Counters,
+		NamespaceTypeGauge:   config.Namespace.Suffixes.Gauges,
+		NamespaceTypeRate:    config.Namespace.Suffixes.Rates,
+		NamespaceTypeSet:     config.Namespace.Suffixes.Sets,
+		NamespaceTypeTimer:   config.Namespace.Suffixes.Timers,
+	}
+
+	// Global prefix.
+	if config.Namespace.Prefix != "" {
+		prefix = config.Namespace.Prefix + "."
+	}
+
+	// Type prefixes.
+	for metricType, typePrefix := range configPrefixes {
+		prefixes[metricType] = prefix
+		if typePrefix != "" {
+			prefixes[metricType] = prefix + typePrefix + "."
+		}
+	}
+
+	// Global suffix.
+	if config.Namespace.Suffix != "" {
+		suffix = "." + config.Namespace.Suffix
+	}
+
+	// Type suffixes
+	for metricType, typeSuffix := range configSuffixes {
+		suffixes[metricType] = suffix
+		if typeSuffix != "" {
+			suffixes[metricType] = "." + typeSuffix + suffix
+		}
+	}
+
+	return prefixes, suffixes
+}
+
+func (c CarbonRelay) ApplyPrefixAndSuffix(namespace string, metricType string) string {
+	return fmt.Sprintf("%s%s%s", c.Prefixes[metricType], namespace, c.Suffixes[metricType])
 }
 
 // Relay implements MetricRelay::Relay().
@@ -94,50 +129,53 @@ func (c CarbonRelay) Relay(metric Metric, logger Logger) bool {
 	ProcessMetric(&metric, c.FlushInterval, c.Percentile, logger)
 	// @todo: are we ever setting flush time?
 	stringTime := strconv.Itoa(metric.FlushTime)
-	var gkey string
+	var key string
+	var qkey string
 
 	defer logger.Info.Println("Done sending to Graphite")
 
 	switch metric.MetricType {
 	case MetricTypeGauge:
-		gkey = fmt.Sprintf("%s%s", c.Prefixes["gauges"], metric.Key)
-		sendCarbonMetric(gkey, metric.LastValue, stringTime, true, c, logger)
+		key = c.ApplyPrefixAndSuffix(metric.Key, NamespaceTypeGauge)
+		sendCarbonMetric(key, metric.LastValue, stringTime, true, c, logger)
 	case MetricTypeCounter:
-		gkey = fmt.Sprintf("%s%s", c.Prefixes["rates"], metric.Key)
-		sendCarbonMetric(gkey, metric.ValuesPerSecond, stringTime, true, c, logger)
+		key = c.ApplyPrefixAndSuffix(metric.Key, NamespaceTypeRate)
+		sendCarbonMetric(key, metric.ValuesPerSecond, stringTime, true, c, logger)
 
-		gkey = fmt.Sprintf("%s%s", c.Prefixes["counters"], metric.Key)
-		sendCarbonMetric(gkey, metric.LastValue, stringTime, true, c, logger)
+		key = c.ApplyPrefixAndSuffix(metric.Key, NamespaceTypeCounter)
+		sendCarbonMetric(key, metric.LastValue, stringTime, true, c, logger)
 	case MetricTypeSet:
-		gkey = fmt.Sprintf("%s%s", c.Prefixes["sets"], metric.Key)
-		sendCarbonMetric(gkey, metric.LastValue, stringTime, true, c, logger)
+		key = c.ApplyPrefixAndSuffix(metric.Key, NamespaceTypeSet)
+		sendCarbonMetric(key, metric.LastValue, stringTime, true, c, logger)
 	case MetricTypeTimer:
 		// Cumulative values.
-		gkey = fmt.Sprintf("%s%s.mean_value", c.Prefixes["timers"], metric.Key)
-		sendCarbonMetric(gkey, metric.MeanValue, stringTime, true, c, logger)
+		key = c.ApplyPrefixAndSuffix(metric.Key+".mean_value", NamespaceTypeTimer)
+		sendCarbonMetric(key, metric.MeanValue, stringTime, true, c, logger)
 
-		gkey = fmt.Sprintf("%s%s.median_value", c.Prefixes["timers"], metric.Key)
-		sendCarbonMetric(gkey, metric.MedianValue, stringTime, true, c, logger)
+		key = c.ApplyPrefixAndSuffix(metric.Key+".median_value", NamespaceTypeTimer)
+		sendCarbonMetric(key, metric.MedianValue, stringTime, true, c, logger)
 
-		gkey = fmt.Sprintf("%s%s.max_value", c.Prefixes["timers"], metric.Key)
-		sendCarbonMetric(gkey, metric.MaxValue, stringTime, true, c, logger)
+		key = c.ApplyPrefixAndSuffix(metric.Key+".max_value", NamespaceTypeTimer)
+		sendCarbonMetric(key, metric.MaxValue, stringTime, true, c, logger)
 
-		gkey = fmt.Sprintf("%s%s.min_value", c.Prefixes["timers"], metric.Key)
-		sendCarbonMetric(gkey, metric.MinValue, stringTime, true, c, logger)
+		key = c.ApplyPrefixAndSuffix(metric.Key+".min_value", NamespaceTypeTimer)
+		sendCarbonMetric(key, metric.MinValue, stringTime, true, c, logger)
 
 		// Quantile values.
 		for _, q := range metric.Quantiles {
-			gkey = fmt.Sprintf("%s%s.mean_%d", c.Prefixes["timers"], metric.Key, q.Quantile)
-			sendCarbonMetric(gkey, q.Mean, stringTime, true, c, logger)
+			qkey = strconv.FormatInt(int64(q.Quantile), 10)
 
-			gkey = fmt.Sprintf("%s%s.median_%d", c.Prefixes["timers"], metric.Key, q.Quantile)
-			sendCarbonMetric(gkey, q.Median, stringTime, true, c, logger)
+			key = c.ApplyPrefixAndSuffix(metric.Key+".mean_"+qkey, NamespaceTypeTimer)
+			sendCarbonMetric(key, q.Mean, stringTime, true, c, logger)
 
-			gkey = fmt.Sprintf("%s%s.upper_%d", c.Prefixes["timers"], metric.Key, q.Quantile)
-			sendCarbonMetric(gkey, q.Max, stringTime, true, c, logger)
+			key = c.ApplyPrefixAndSuffix(metric.Key+".median_"+qkey, NamespaceTypeTimer)
+			sendCarbonMetric(key, q.Median, stringTime, true, c, logger)
 
-			gkey = fmt.Sprintf("%s%s.sum_%d", c.Prefixes["timers"], metric.Key, q.Quantile)
-			sendCarbonMetric(gkey, q.Sum, stringTime, true, c, logger)
+			key = c.ApplyPrefixAndSuffix(metric.Key+".upper_"+qkey, NamespaceTypeTimer)
+			sendCarbonMetric(key, q.Max, stringTime, true, c, logger)
+
+			key = c.ApplyPrefixAndSuffix(metric.Key+".sum_"+qkey, NamespaceTypeTimer)
+			sendCarbonMetric(key, q.Sum, stringTime, true, c, logger)
 		}
 	}
 	return true
