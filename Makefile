@@ -26,7 +26,7 @@ run: ${project}
 	go run -race ${project}.go
 
 $(project): deps
-	$(GOM) build -o $(GOPATH)/bin/statsgod
+	$(GOM) $(GOM_ENV) build -o $(GOPATH)/bin/statsgod
 
 deps:
 	$(GOM) -test install
