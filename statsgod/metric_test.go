@@ -162,6 +162,28 @@ var _ = Describe("Metrics", func() {
 
 		Context("when we process metrics", func() {
 			logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
+
+			// This is a full test of the goroutine that listens for parsed metrics
+			// and then aggregates and relays to the designated backend.
+			It("should aggregate and relay properly", func() {
+				config, _ = CreateConfig("")
+				config.Relay.Type = RelayTypeMock
+				relay := CreateRelay(config, logger)
+				relayChannel := make(chan *Metric, 2)
+				quit := false
+
+				go RelayMetrics(relay, relayChannel, logger, &config, &quit)
+				metricOne := CreateSimpleMetric("test.one", float64(123), MetricTypeGauge)
+				metricTwo := CreateSimpleMetric("test.two", float64(234), MetricTypeGauge)
+				relayChannel <- metricOne
+				relayChannel <- metricTwo
+				for len(relayChannel) > 0 {
+					time.Sleep(time.Microsecond)
+				}
+				quit = true
+				Expect(len(relayChannel)).Should(Equal(0))
+			})
+
 			metrics := make(map[string]Metric)
 
 			// Test that counters aggregate and process properly.

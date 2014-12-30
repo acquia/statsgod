@@ -39,6 +39,7 @@ var _ = Describe("Config", func() {
 				Expect(config.Service.Name).ShouldNot(Equal(nil))
 				Expect(config.Service.Auth).ShouldNot(Equal(nil))
 				Expect(config.Service.Tokens).ShouldNot(Equal(nil))
+				Expect(config.Service.Hostname).ShouldNot(Equal(nil))
 
 				// Connection
 				Expect(config.Connection.Tcp.Host).ShouldNot(Equal(nil))
@@ -88,10 +89,15 @@ var _ = Describe("Config", func() {
 			It("should match the defaults", func() {
 				Expect(fileErr).Should(BeNil())
 
+				hostname := GetHostname("")
+				hostnameDefault := GetHostname("default")
+				Expect(hostnameDefault).Should(Equal("default"))
+
 				// Service
 				Expect(yaml.Service.Name).Should(Equal(config.Service.Name))
 				Expect(yaml.Service.Auth).Should(Equal(config.Service.Auth))
 				Expect(yaml.Service.Tokens).Should(Equal(config.Service.Tokens))
+				Expect(hostname).Should(Equal(config.Service.Hostname))
 
 				// Connection
 				Expect(yaml.Connection.Tcp.Host).Should(Equal(config.Connection.Tcp.Host))

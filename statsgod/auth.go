@@ -33,14 +33,18 @@ const (
 )
 
 // CreateAuth is a factory to create an Auth object.
-func CreateAuth(authType string) Auth {
-	switch authType {
+func CreateAuth(config ConfigValues) Auth {
+	switch config.Service.Auth {
 	case AuthTypeConfigToken:
-		return new(AuthConfigToken)
+		tokenAuth := new(AuthConfigToken)
+		tokenAuth.Tokens = config.Service.Tokens
+		return tokenAuth
+
 	case AuthTypeNone:
+		fallthrough
+	default:
 		return new(AuthNone)
 	}
-	return new(AuthNone)
 }
 
 // Auth is an interface describing statsgod authentication objects.
