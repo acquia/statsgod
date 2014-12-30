@@ -41,19 +41,30 @@ relay:
     flush: 10s     # How frequently to flush to the relay.
 
 ###
+# Namespace options
+###
+namespace:
+    prefix: "stats"
+    prefixes:
+        counters: "counts"
+        gauges: "gauges"
+        rates: "rates"
+        sets: "sets"
+        timers: "timers"
+    suffix: ""
+    suffixes:
+        counters: ""
+        gauges: ""
+        rates: ""
+        sets: ""
+        timers: ""
+
+###
 # Stats options
 ###
 stats:
     percentile:
         - 80
-    prefix:
-        counters: "counts"
-        gauges: "gauges"
-        global: "stats"
-        rates: "rates"
-        sets: "sets"
-        timers: "timers"
-
 ###
 # Debug options
 ###
