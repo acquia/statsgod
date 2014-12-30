@@ -22,6 +22,7 @@ package statsgod
 
 import (
 	"fmt"
+	"runtime"
 	"strconv"
 	"time"
 )
@@ -41,6 +42,8 @@ const (
 	NamespaceTypeSet
 	// NamespaceTypeTimer is an enum for timer namespacing.
 	NamespaceTypeTimer
+	// Megabyte represents the number of bytes in a megabyte.
+	Megabyte = 1048576
 )
 
 // MetricRelay defines the interface for a back end implementation.
@@ -49,14 +52,31 @@ type MetricRelay interface {
 }
 
 // CreateRelay is a factory for instantiating remote relays.
-func CreateRelay(relayType string) MetricRelay {
-	switch relayType {
+func CreateRelay(config ConfigValues, logger Logger) MetricRelay {
+	switch config.Relay.Type {
 	case RelayTypeCarbon:
-		return new(CarbonRelay)
+		// Create a relay to carbon.
+		relay := new(CarbonRelay)
+		relay.FlushInterval = config.Relay.Flush
+		relay.Percentile = config.Stats.Percentile
+		relay.SetPrefixesAndSuffixes(config)
+		// Create a connection pool for the relay to use.
+		pool, err := CreateConnectionPool(config.Relay.Concurrency, fmt.Sprintf("%s:%d", config.Carbon.Host, config.Carbon.Port), ConnPoolTypeTcp, config.Relay.Timeout, logger)
+		if err != nil {
+			panic(fmt.Sprintf("Fatal error, could not create a connection pool to %s:%d", config.Carbon.Host, config.Carbon.Port))
+		}
+		relay.ConnectionPool = pool
+		logger.Info.Println("Relaying metrics to carbon backend")
+		return relay
 	case RelayTypeMock:
-		return new(MockRelay)
+		fallthrough
+	default:
+		relay := new(MockRelay)
+		relay.FlushInterval = config.Relay.Flush
+		relay.Percentile = config.Stats.Percentile
+		logger.Info.Println("Relaying metrics to mock backend")
+		return relay
 	}
-	return new(MockRelay)
 }
 
 // CarbonRelay implements MetricRelay.
@@ -237,4 +257,115 @@ func (c MockRelay) Relay(metric Metric, logger Logger) bool {
 	ProcessMetric(&metric, c.FlushInterval, c.Percentile, logger)
 	logger.Trace.Printf(fmt.Sprintf("Mock flush: %v", metric))
 	return true
+}
+
+// RelayMetrics relays the metrics in-memory to the permanent storage facility.
+// At this point we are receiving Metric structures from a channel that need to
+// be aggregated by the specified namespace. We do this immediately, then when
+// the specified flush interval passes, we send aggregated metrics to storage.
+func RelayMetrics(relay MetricRelay, relayChannel chan *Metric, logger Logger, config *ConfigValues, quit *bool) {
+	// Use a tick channel to determine if a flush message has arrived.
+	tick := time.Tick(config.Relay.Flush)
+	logger.Info.Printf("Flushing every %v", config.Relay.Flush)
+
+	// Track the flush cycle metrics.
+	var flushStart time.Time
+	var flushStop time.Time
+	var flushCount int
+
+	// Internal storage.
+	metrics := make(map[string]Metric)
+
+	for {
+		if *quit {
+			break
+		}
+
+		// Process the metrics as soon as they arrive on the channel. If nothing has
+		// been added during the flush interval duration, continue the loop to allow
+		// it to flush the data.
+		select {
+		case metric := <-relayChannel:
+			AggregateMetric(metrics, *metric)
+			if config.Debug.Receipt {
+				logger.Info.Printf("Metric: %v", metrics[metric.Key])
+			}
+		case <-time.After(config.Relay.Flush):
+			logger.Trace.Println("Metric Channel Timeout")
+			// Nothing to read, attempt to flush.
+		}
+
+		// After reading from the metrics channel, we check the ticks channel. If there
+		// is a tick, flush the in-memory metrics.
+		select {
+		case <-tick:
+			logger.Trace.Println("Tick...")
+
+			// Prepare the runtime metrics.
+			PrepareRuntimeMetrics(metrics, config)
+
+			// Time and flush the received metrics.
+			flushCount = len(metrics)
+			flushStart = time.Now()
+			relayAllMetrics(relay, metrics, logger)
+			flushStop = time.Now()
+
+			// Prepare and flush the internal metrics.
+			PrepareFlushMetrics(metrics, config, flushStart, flushStop, flushCount)
+			relayAllMetrics(relay, metrics, logger)
+		default:
+			// Flush interval hasn't passed yet.
+		}
+	}
+}
+
+// relayAllMetrics is a helper to iterate over a Metric map and flush all to the relay.
+func relayAllMetrics(relay MetricRelay, metrics map[string]Metric, logger Logger) {
+	for key, metric := range metrics {
+		metric.FlushTime = int(time.Now().Unix())
+		relay.Relay(metric, logger)
+		delete(metrics, key)
+	}
+}
+
+// PrepareRuntimeMetrics creates key runtime metrics to monitor the health of the system.
+func PrepareRuntimeMetrics(metrics map[string]Metric, config *ConfigValues) {
+	if config.Debug.Relay {
+		memStats := &runtime.MemStats{}
+		runtime.ReadMemStats(memStats)
+
+		// Prepare a metric for the memory allocated.
+		heapAllocKey := fmt.Sprintf("statsgod.%s.runtime.memory.heapalloc", config.Service.Hostname)
+		heapAllocValue := float64(memStats.HeapAlloc) / float64(Megabyte)
+		heapAllocMetric := CreateSimpleMetric(heapAllocKey, heapAllocValue, MetricTypeGauge)
+		metrics[heapAllocMetric.Key] = *heapAllocMetric
+
+		// Prepare a metric for the memory allocated that is still in use.
+		allocKey := fmt.Sprintf("statsgod.%s.runtime.memory.alloc", config.Service.Hostname)
+		allocValue := float64(memStats.Alloc) / float64(Megabyte)
+		allocMetric := CreateSimpleMetric(allocKey, allocValue, MetricTypeGauge)
+		metrics[allocMetric.Key] = *allocMetric
+
+		// Prepare a metric for the memory obtained from the system.
+		sysKey := fmt.Sprintf("statsgod.%s.runtime.memory.sys", config.Service.Hostname)
+		sysValue := float64(memStats.Sys) / float64(Megabyte)
+		sysMetric := CreateSimpleMetric(sysKey, sysValue, MetricTypeGauge)
+		metrics[sysMetric.Key] = *sysMetric
+	}
+}
+
+// PrepareFlushMetrics creates metrics that represent the speed and size of the flushes.
+func PrepareFlushMetrics(metrics map[string]Metric, config *ConfigValues, flushStart time.Time, flushStop time.Time, flushCount int) {
+	if config.Debug.Relay {
+		// Prepare the duration metric.
+		durationKey := fmt.Sprintf("statsgod.%s.flush.duration", config.Service.Hostname)
+		durationValue := float64(int64(flushStop.Sub(flushStart).Nanoseconds()) / int64(time.Millisecond))
+		durationMetric := CreateSimpleMetric(durationKey, durationValue, MetricTypeTimer)
+		metrics[durationMetric.Key] = *durationMetric
+
+		// Prepare the counter metric.
+		countKey := fmt.Sprintf("statsgod.%s.flush.count", config.Service.Hostname)
+		countMetric := CreateSimpleMetric(countKey, float64(flushCount), MetricTypeGauge)
+		metrics[countMetric.Key] = *countMetric
+	}
 }

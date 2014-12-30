@@ -37,8 +37,11 @@ var _ = Describe("Relay", func() {
 		BeforeEach(func() {
 			logger = *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
 			config, _ = CreateConfig("")
-			config.Relay.Type = "mock"
+			config.Relay.Type = RelayTypeMock
 			tmpPort = StartTemporaryListener()
+			// In case we switch to the carbon relay, we need to use
+			// the temporary port number.
+			config.Carbon.Port = tmpPort
 		})
 
 		AfterEach(func() {
@@ -48,17 +51,19 @@ var _ = Describe("Relay", func() {
 		Context("when using the factory function", func() {
 			It("should be a complete structure", func() {
 				// Tests that we can get a mock relay.
-				mockRelay := CreateRelay(RelayTypeMock)
+				mockRelay := CreateRelay(config, logger)
 				Expect(mockRelay).ShouldNot(Equal(nil))
 				Expect(reflect.TypeOf(mockRelay).String()).Should(Equal("*statsgod.MockRelay"))
 
 				// Tests that we can get a carbon relay.
-				carbonRelay := CreateRelay(RelayTypeCarbon)
+				config.Relay.Type = RelayTypeCarbon
+				carbonRelay := CreateRelay(config, logger)
 				Expect(carbonRelay).ShouldNot(Equal(nil))
 				Expect(reflect.TypeOf(carbonRelay).String()).Should(Equal("*statsgod.CarbonRelay"))
 
 				// Tests that we can get a mock relay as the default value
-				fooRelay := CreateRelay("foo")
+				config.Relay.Type = "foo"
+				fooRelay := CreateRelay(config, logger)
 				Expect(fooRelay).ShouldNot(Equal(nil))
 				Expect(reflect.TypeOf(fooRelay).String()).Should(Equal("*statsgod.MockRelay"))
 			})
@@ -66,7 +71,8 @@ var _ = Describe("Relay", func() {
 
 		Context("when creating a CarbonRelay", func() {
 			It("should be a complete structure", func() {
-				backendRelay := CreateRelay(RelayTypeCarbon).(*CarbonRelay)
+				config.Relay.Type = RelayTypeCarbon
+				backendRelay := CreateRelay(config, logger).(*CarbonRelay)
 				backendRelay.Percentile = []int{50, 75, 90}
 				backendRelay.SetPrefixesAndSuffixes(config)
 				Expect(backendRelay.Prefixes[NamespaceTypeCounter]).Should(Equal("stats.counts."))
@@ -85,7 +91,6 @@ var _ = Describe("Relay", func() {
 				Expect(backendRelay.ConnectionPool).ShouldNot(Equal(nil))
 
 				// Test the Relay() function.
-				logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
 				pool, _ := CreateConnectionPool(1, fmt.Sprintf("127.0.0.1:%d", tmpPort), ConnPoolTypeTcp, 10*time.Second, logger)
 				backendRelay.ConnectionPool = pool
 				testMetrics := []string{
@@ -131,11 +136,52 @@ var _ = Describe("Relay", func() {
 			})
 		})
 
+		Context("when relaying metrics", func() {
+			It("should parse from the channel and populate the relay channel", func() {
+				// This is a full test of the goroutine that takes input strings
+				// from the socket and converts them to Metrics.
+				parseChannel := make(chan string, 2)
+				relayChannel := make(chan *Metric, 2)
+				auth := CreateAuth(config)
+				quit := false
+				go ParseMetrics(parseChannel, relayChannel, auth, logger, &quit)
+				parseChannel <- "test.one:123|c"
+				parseChannel <- "test.two:234|g"
+				for len(parseChannel) > 0 {
+					// Wait for the channel to be emptied.
+					time.Sleep(time.Microsecond)
+				}
+				quit = true
+				Expect(len(parseChannel)).Should(Equal(0))
+				Expect(len(relayChannel)).Should(Equal(2))
+				metricOne := <-relayChannel
+				metricTwo := <-relayChannel
+				Expect(metricOne.LastValue).Should(Equal(float64(123)))
+				Expect(metricTwo.LastValue).Should(Equal(float64(234)))
+			})
+
+			It("should prepare internal stats", func() {
+				flushStart := time.Now()
+				flushStop := flushStart.Add(time.Second)
+				flushCount := 10
+				config.Service.Hostname = "test"
+				config.Debug.Relay = true
+				metrics := make(map[string]Metric)
+				PrepareRuntimeMetrics(metrics, &config)
+				PrepareFlushMetrics(metrics, &config, flushStart, flushStop, flushCount)
+				// Runtime and flush information should be populated.
+				Expect(metrics["statsgod.test.runtime.memory.heapalloc"].LastValue).ShouldNot(Equal(float64(0.0)))
+				Expect(metrics["statsgod.test.runtime.memory.alloc"].LastValue).ShouldNot(Equal(float64(0.0)))
+				Expect(metrics["statsgod.test.runtime.memory.sys"].LastValue).ShouldNot(Equal(float64(0.0)))
+				Expect(metrics["statsgod.test.flush.duration"].LastValue).ShouldNot(Equal(float64(0.0)))
+				Expect(metrics["statsgod.test.flush.count"].LastValue).ShouldNot(Equal(float64(0.0)))
+			})
+		})
+
 		Context("when creating a MockRelay", func() {
 			It("should be a complete structure", func() {
-				backendRelay := CreateRelay(RelayTypeMock).(*MockRelay)
+				backendRelay := CreateRelay(config, logger)
 				metricOne, _ := ParseMetricString("test.one:3|c")
-				logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
 				backendRelay.Relay(*metricOne, logger)
 			})
 		})

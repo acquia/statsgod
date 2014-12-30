@@ -20,6 +20,8 @@ package statsgod
 import (
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
+	"os"
+	"regexp"
 	"time"
 )
 
@@ -38,10 +40,11 @@ import (
 // value set in LoadFile() to ensure a safe runtime environment.
 type ConfigValues struct {
 	Service struct {
-		Name   string
-		Debug  bool
-		Auth   string
-		Tokens map[string]bool
+		Name     string
+		Debug    bool
+		Auth     string
+		Tokens   map[string]bool
+		Hostname string
 	}
 	Connection struct {
 		Tcp struct {
@@ -113,6 +116,7 @@ func (config *ConfigValues) LoadFile(filePath string) error {
 	config.Service.Name = "statsgod"
 	config.Service.Debug = false
 	config.Service.Auth = "none"
+	config.Service.Hostname = ""
 
 	// Connection
 	config.Connection.Tcp.Host = "127.0.0.1"
@@ -174,5 +178,25 @@ func (config *ConfigValues) LoadFile(filePath string) error {
 		config.Service.Tokens = map[string]bool{"token-name": false}
 	}
 
+	// If the hostname is empty, use the current one.
+	config.Service.Hostname = GetHostname(config.Service.Hostname)
 	return err
+}
+
+// GetHostname determines the current hostname if the provided default is empty.
+func GetHostname(defaultValue string) (hostname string) {
+	if defaultValue == "" {
+		hn, err := os.Hostname()
+		if err != nil {
+			hostname = "unknown"
+		} else {
+			hostname = hn
+		}
+	} else {
+		hostname = defaultValue
+	}
+	re := regexp.MustCompile("[^a-zA-Z0-9]")
+	hostname = re.ReplaceAllString(hostname, "-")
+
+	return
 }
