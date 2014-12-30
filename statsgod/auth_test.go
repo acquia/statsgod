@@ -27,6 +27,7 @@ var _ = Describe("Auth", func() {
 
 	var testToken = "test-token"
 	var testMetric = "foo.bar:123|g"
+	var config ConfigValues
 
 	// The boolean value is whether or not the token auth should succeed.
 	var testMetrics = map[string]bool{
@@ -39,21 +40,27 @@ var _ = Describe("Auth", func() {
 	}
 
 	Describe("Testing the authentication", func() {
+		BeforeEach(func() {
+			config, _ = CreateConfig("")
+		})
 
 		Context("when using the factory function", func() {
 			It("should be a complete structure", func() {
 				// Create an token config auth.
-				tokenAuth := CreateAuth(AuthTypeConfigToken)
+				config.Service.Auth = AuthTypeConfigToken
+				tokenAuth := CreateAuth(config)
 				Expect(tokenAuth).ShouldNot(BeNil())
 				Expect(reflect.TypeOf(tokenAuth).String()).Should(Equal("*statsgod.AuthConfigToken"))
 
 				// Create a no auth.
-				noAuth := CreateAuth(AuthTypeNone)
+				config.Service.Auth = AuthTypeNone
+				noAuth := CreateAuth(config)
 				Expect(noAuth).ShouldNot(BeNil())
 				Expect(reflect.TypeOf(noAuth).String()).Should(Equal("*statsgod.AuthNone"))
 
 				// No auth should be default.
-				defaultAuth := CreateAuth("foo")
+				config.Service.Auth = "foo"
+				defaultAuth := CreateAuth(config)
 				Expect(defaultAuth).ShouldNot(BeNil())
 				Expect(reflect.TypeOf(defaultAuth).String()).Should(Equal("*statsgod.AuthNone"))
 
@@ -62,7 +69,8 @@ var _ = Describe("Auth", func() {
 
 		Context("when using AuthNone", func() {
 			It("should always authenticate", func() {
-				noAuth := CreateAuth(AuthTypeNone)
+				config.Service.Auth = AuthTypeNone
+				noAuth := CreateAuth(config)
 
 				// No auth should always authenticate.
 				for metric, _ := range testMetrics {
@@ -74,7 +82,8 @@ var _ = Describe("Auth", func() {
 
 		Context("when using AuthConfigToken", func() {
 			It("AuthConfigToken should only allow valid tokens", func() {
-				tokenAuth := CreateAuth(AuthTypeConfigToken).(*AuthConfigToken)
+				config.Service.Auth = AuthTypeConfigToken
+				tokenAuth := CreateAuth(config).(*AuthConfigToken)
 				tokenAuth.Tokens = map[string]bool{testToken: true}
 
 				// Auth should only authenticate with a valid token.

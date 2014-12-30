@@ -2,13 +2,14 @@
 # Main server configuration
 ###
 service:
-    name: statsgod
+    name: "statsgod"
     auth: "none"            # One of "none" or "token".
     tokens:
         "token-name": false # A list of tokens for auth: "ConfigToken". Use the
                             # format: [token]: [valid] where [token] is the token
                             # string and [valid] is a boolean value describing
                             # whether or not the token is valid.
+    hostname: ""            # Leave hostname empty to use the current hostname.
 
 ###
 # Socket connections
