@@ -52,21 +52,6 @@ var parseChannel = make(chan string)
 var logger = *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
 var config, _ = CreateConfig("")
 
-var _ = BeforeSuite(func() {
-	for i, ts := range testSockets {
-		socket := CreateSocket(ts.socketType, ts.socketAddr)
-		go socket.Listen(parseChannel, logger, &config)
-		BlockForSocket(socket, time.Second)
-		sockets[i] = socket
-	}
-})
-
-var _ = AfterSuite(func() {
-	for i, _ := range testSockets {
-		sockets[i].Close(logger)
-	}
-})
-
 var _ = Describe("Sockets", func() {
 
 	Describe("Testing the Socket interface", func() {
@@ -110,12 +95,14 @@ var _ = Describe("Sockets", func() {
 		})
 
 		It("should ignore empty values", func() {
+			message := ""
 			for i, ts := range testSockets {
+				sendSocketMessage(ts.socketDesc, sockets[i], "\x00")
+				sendSocketMessage(ts.socketDesc, sockets[i], "\n")
 				sendSocketMessage(ts.socketDesc, sockets[i], "")
-				message := ""
 				select {
 				case message = <-parseChannel:
-				case <-time.After(time.Microsecond):
+				case <-time.After(100 * time.Microsecond):
 					message = ""
 				}
 				Expect(message).Should(Equal(""))
@@ -129,6 +116,13 @@ var _ = Describe("Sockets", func() {
 				socket = CreateSocket(ts.socketType, ts.badAddr)
 				Expect(func() { socket.Listen(parseChannel, logger, &config) }).Should(Panic())
 			}
+		})
+
+		It("should block while waiting for a socket to become active", func() {
+			socket := CreateSocket(SocketTypeTcp, "127.0.0.1:0")
+			start := time.Now()
+			BlockForSocket(socket, time.Second)
+			Expect(time.Now()).Should(BeTemporally(">=", start, time.Second))
 		})
 
 		It("should panic if it is already listening on an address.", func() {

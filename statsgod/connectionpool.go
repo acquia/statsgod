@@ -28,6 +28,8 @@ const (
 	ConnPoolTypeTcp = iota
 	// ConnPoolTypeUnix is an enum describing a Unix Socket connection pool.
 	ConnPoolTypeUnix
+	// ConnPoolTypeNone is for testing.
+	ConnPoolTypeNone
 )
 
 // ConnectionPool maintains a channel of connections to a remote host.

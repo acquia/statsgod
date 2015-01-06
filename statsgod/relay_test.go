@@ -17,7 +17,6 @@
 package statsgod_test
 
 import (
-	"fmt"
 	. "github.com/acquia/statsgod/statsgod"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -61,6 +60,11 @@ var _ = Describe("Relay", func() {
 				Expect(carbonRelay).ShouldNot(Equal(nil))
 				Expect(reflect.TypeOf(carbonRelay).String()).Should(Equal("*statsgod.CarbonRelay"))
 
+				// Tests that we panic if it cannot create a connection pool.
+				config.Carbon.Host = "127.0.0.1"
+				config.Carbon.Port = 0
+				Expect(func() { CreateRelay(config, logger) }).Should(Panic())
+
 				// Tests that we can get a mock relay as the default value
 				config.Relay.Type = "foo"
 				fooRelay := CreateRelay(config, logger)
@@ -90,22 +94,6 @@ var _ = Describe("Relay", func() {
 				// At this point the connection pool has not been established.
 				Expect(backendRelay.ConnectionPool).ShouldNot(Equal(nil))
 
-				// Test the Relay() function.
-				pool, _ := CreateConnectionPool(1, fmt.Sprintf("127.0.0.1:%d", tmpPort), ConnPoolTypeTcp, 10*time.Second, logger)
-				backendRelay.ConnectionPool = pool
-				testMetrics := []string{
-					"test.one:3|c",
-					"test.two:3|g",
-					"test.three:3|ms",
-					"test.four:3|s",
-				}
-
-				var metric *Metric
-				for _, testMetric := range testMetrics {
-					metric, _ = ParseMetricString(testMetric)
-					backendRelay.Relay(*metric, logger)
-				}
-
 				// Test prefixes and suffixes.
 				config.Namespace.Prefix = "p"
 				config.Namespace.Prefixes.Counters = "c"
@@ -127,6 +115,7 @@ var _ = Describe("Relay", func() {
 				Expect(backendRelay.ApplyPrefixAndSuffix("m", NamespaceTypeTimer)).Should(Equal("p.t.m.t.s"))
 
 				// Test a broken relay.
+				metric, _ := ParseMetricString("metric.one")
 				StopTemporaryListener()
 
 				Expect(func() { backendRelay.Relay(*metric, logger) }).Should(Panic())
@@ -137,27 +126,51 @@ var _ = Describe("Relay", func() {
 		})
 
 		Context("when relaying metrics", func() {
-			It("should parse from the channel and populate the relay channel", func() {
-				// This is a full test of the goroutine that takes input strings
-				// from the socket and converts them to Metrics.
-				parseChannel := make(chan string, 2)
+			// This is a full test of the goroutine that listens for parsed metrics
+			// and then aggregates and relays to the designated backend.
+			It("should aggregate and relay properly", func() {
+				config, _ = CreateConfig("")
+				config.Relay.Type = RelayTypeMock
+				config.Relay.Flush = time.Microsecond
+				config.Debug.Receipt = true
+				relay := CreateRelay(config, logger)
 				relayChannel := make(chan *Metric, 2)
-				auth := CreateAuth(config)
 				quit := false
-				go ParseMetrics(parseChannel, relayChannel, auth, logger, &quit)
-				parseChannel <- "test.one:123|c"
-				parseChannel <- "test.two:234|g"
-				for len(parseChannel) > 0 {
-					// Wait for the channel to be emptied.
-					time.Sleep(time.Microsecond)
+
+				go RelayMetrics(relay, relayChannel, logger, &config, &quit)
+				metricOne := CreateSimpleMetric("test.one", float64(123), MetricTypeGauge)
+				metricTwo := CreateSimpleMetric("test.two", float64(234), MetricTypeGauge)
+				relayChannel <- metricOne
+				relayChannel <- metricTwo
+				for len(relayChannel) > 0 {
+					time.Sleep(10 * time.Microsecond)
 				}
 				quit = true
-				Expect(len(parseChannel)).Should(Equal(0))
-				Expect(len(relayChannel)).Should(Equal(2))
-				metricOne := <-relayChannel
-				metricTwo := <-relayChannel
-				Expect(metricOne.LastValue).Should(Equal(float64(123)))
-				Expect(metricTwo.LastValue).Should(Equal(float64(234)))
+				Expect(len(relayChannel)).Should(Equal(0))
+			})
+
+			It("should delete metrics from the store after relaying", func() {
+				config.Relay.Type = RelayTypeCarbon
+				config.Carbon.Host = "127.0.0.1"
+				config.Carbon.Port = tmpPort
+				backendRelay := CreateRelay(config, logger)
+
+				testMetrics := []string{
+					"test.one:3|c",
+					"test.two:3|g",
+					"test.three:3|ms",
+					"test.four:3|s",
+				}
+
+				var metric *Metric
+				metrics := make(map[string]Metric)
+				for _, testMetric := range testMetrics {
+					metric, _ = ParseMetricString(testMetric)
+					metrics[metric.Key] = *metric
+				}
+				Expect(len(metrics)).Should(Equal(4))
+				RelayAllMetrics(backendRelay, metrics, logger)
+				Expect(len(metrics)).Should(Equal(0))
 			})
 
 			It("should prepare internal stats", func() {
