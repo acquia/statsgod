@@ -2,13 +2,12 @@ statsgod
 ========
 
 
-Statsgod is an experimental Go implementation (or deviation) of Etsy's statsd service.
+Statsgod is a metric aggregation service inspired by the statsd project. Written in Golang, it increases performance and can be deployed without dependencies. This project uses the same metric string format as statsd, but adds new features like alternate sockets, authentication, etc.
 
 ## Usage
 
 	Usage:  statsgod [args]
 	  -config="config.yml": YAML config file path
-	  -debug=false: Debugging mode
 
 ### Example:
 1.  start the daemon.
@@ -19,11 +18,23 @@ Statsgod is an experimental Go implementation (or deviation) of Etsy's statsd se
 
 		gom exec go run test_receiver.go
 
-3. Send data to the daemon. Set a gauge to 3 for the_magic_number
+3. Send data to the daemon. Set a gauge to 3 for your.metric.name
 
-		echo "the_magic_number:3|g" | nc localhost 8125 # TCP
-		echo "the_magic_number:3|g" | nc -4u -w0 localhost 8126 # UDP
-		echo "the_magic_number:3|g" | nc -U /tmp/statsgod.sock # Unix Socket
+		echo "your.metric.name:3|g" | nc localhost 8125 # TCP
+		echo "your.metric.name:3|g" | nc -4u -w0 localhost 8126 # UDP
+		echo "your.metric.name:3|g" | nc -U /tmp/statsgod.sock # Unix Socket
+
+### Metric Format
+Data is sent over a socket connection as a string using the format: [namespace]:[value]|[type] where the namespace is a dot-delimeted string like "user.login.success". Values are floating point numbers represented as strings. The metric type uses the following values:
+
+- Gauge   (g):  constant metric, keeps the last value.
+- Counter (c):  increment/decrement a given namespace.
+- Timer   (ms): a timer that calculates averages (see below).
+- Set     (s): a count of unique values sent during a flush period.
+
+Optionally you may denote that a metric has been sampled by adding "|@[sample rate as a float]". Counters will inflate the value accordingly so that it can be accurately used to calculate a rate.
+
+An example data string would be "user.login.success:123|c|@0.9"
 
 ### Sending Metrics
 Client code can send metrics via any one of three sockets which listen concurrently:
