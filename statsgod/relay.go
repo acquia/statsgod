@@ -169,6 +169,9 @@ func (c CarbonRelay) Relay(metric Metric, logger Logger) bool {
 		key = c.ApplyPrefixAndSuffix(metric.Key, NamespaceTypeSet)
 		sendCarbonMetric(key, metric.LastValue, stringTime, true, c, logger)
 	case MetricTypeTimer:
+		key = c.ApplyPrefixAndSuffix(metric.Key, NamespaceTypeRate)
+		sendCarbonMetric(key, metric.ValuesPerSecond, stringTime, true, c, logger)
+
 		// Cumulative values.
 		key = c.ApplyPrefixAndSuffix(metric.Key+".mean_value", NamespaceTypeTimer)
 		sendCarbonMetric(key, metric.MeanValue, stringTime, true, c, logger)

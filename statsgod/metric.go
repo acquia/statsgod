@@ -26,6 +26,7 @@ import (
 	"time"
 )
 
+// Metric strings look like my.namespaced.value:123|g|@0.9
 const (
 	// SeparatorNamespaceValue is the character separating the namespace and value
 	// in the metric string.
@@ -33,6 +34,9 @@ const (
 	// SeparatorValueType is the character separating the value and metric type in
 	// the metric string.
 	SeparatorValueType = "|"
+	// SeparatorTypeSample is the character separating the type and an optional
+	// sample rate.
+	SeparatorTypeSample = "@"
 )
 
 const (
@@ -63,7 +67,7 @@ type MetricQuantile struct {
 type Metric struct {
 	Key             string           // Name of the metric.
 	MetricType      int              // What type of metric is it (gauge, counter, timer)
-	TotalHits       int              // Number of times it has been used.
+	TotalHits       float64          // Number of times it has been used.
 	LastValue       float64          // The last value stored.
 	ValuesPerSecond float64          // The number of values per second.
 	MinValue        float64          // The min value.
@@ -74,6 +78,7 @@ type Metric struct {
 	AllValues       ValueSlice       // All of the values.
 	FlushTime       int              // What time are we sending Graphite?
 	LastFlushed     int              // When did we last flush this out?
+	SampleRate      float64          // The sample rate of the metric.
 }
 
 // CreateSimpleMetric is a helper to quickly create a metric with the minimum information.
@@ -83,7 +88,7 @@ func CreateSimpleMetric(key string, value float64, metricType int) *Metric {
 	metric.MetricType = metricType
 	metric.LastValue = value
 	metric.AllValues = append(metric.AllValues, metric.LastValue)
-	metric.TotalHits = 1
+	metric.TotalHits = float64(1.0)
 
 	return metric
 }
@@ -92,6 +97,7 @@ func CreateSimpleMetric(key string, value float64, metricType int) *Metric {
 // create a Metric structure. Expects the format [namespace]:[value]|[type]
 func ParseMetricString(metricString string) (*Metric, error) {
 	var metric = new(Metric)
+	sampleRate := float64(1.0)
 
 	// First extract the first element which is the namespace.
 	split1 := strings.Split(strings.TrimSpace(strings.Trim(metricString, "\x00")), SeparatorNamespaceValue)
@@ -105,6 +111,15 @@ func ParseMetricString(metricString string) (*Metric, error) {
 	if len(split2) == 1 {
 		// We didn't find the "|" separator.
 		return metric, errors.New("Invalid data string")
+	} else if len(split2) == 3 {
+		// There may be a specified sample rate.
+		sampleSplit := strings.Split(split2[2], SeparatorTypeSample)
+		if len(sampleSplit) == 2 {
+			rate, rateErr := strconv.ParseFloat(sampleSplit[1], 32)
+			if rateErr == nil && rate > float64(0) && rate <= float64(1) {
+				sampleRate = rate
+			}
+		}
 	}
 
 	// Locate the metric type.
@@ -121,12 +136,20 @@ func ParseMetricString(metricString string) (*Metric, error) {
 		return metric, errors.New("Invalid data string")
 	}
 
+	// If a sample rate was applied, we inflate the hit count to extrapolate
+	// the actual rate.
+	if sampleRate < float64(1.0) {
+		metric.TotalHits = float64(1.0) / sampleRate
+	} else {
+		metric.TotalHits = float64(1.0)
+	}
+
 	// The string was successfully parsed. Convert to a Metric structure.
 	metric.Key = split1[0]
 	metric.MetricType = MetricType
 	metric.LastValue = parsedValue
 	metric.AllValues = append(metric.AllValues, metric.LastValue)
-	metric.TotalHits = 1
+	metric.SampleRate = sampleRate
 
 	return metric, nil
 }
@@ -139,13 +162,14 @@ func AggregateMetric(metrics map[string]Metric, metric Metric) {
 	// If the metric exists in the specified map, we either take the last value or
 	// sum the values and increment the hit count.
 	if metricExists {
-		existingMetric.TotalHits++
+		// Occasionally metrics are sampled and may inflate their numbers.
+		existingMetric.TotalHits += metric.TotalHits
 
 		existingMetric.AllValues = append(existingMetric.AllValues, metric.LastValue)
 
 		switch {
 		case metric.MetricType == MetricTypeCounter:
-			existingMetric.LastValue += metric.LastValue
+			existingMetric.LastValue += metric.LastValue * metric.TotalHits
 		case metric.MetricType == MetricTypeGauge:
 			existingMetric.LastValue = metric.LastValue
 		case metric.MetricType == MetricTypeSet:
@@ -167,11 +191,17 @@ func ProcessMetric(metric *Metric, flushDuration time.Duration, quantiles []int,
 	sort.Sort(metric.AllValues)
 	switch metric.MetricType {
 	case MetricTypeCounter:
-		metric.ValuesPerSecond = float64(len(metric.AllValues)) / float64(flushInterval)
+		metric.ValuesPerSecond = metric.LastValue / float64(flushInterval)
+	case MetricTypeGauge:
+		metric.MedianValue = metric.AllValues.Median()
+		metric.MeanValue = metric.AllValues.Mean()
 	case MetricTypeSet:
 		metric.LastValue = float64(metric.AllValues.UniqueCount())
 	case MetricTypeTimer:
 		metric.MinValue, metric.MaxValue, _ = metric.AllValues.Minmax()
+		metric.MedianValue = metric.AllValues.Median()
+		metric.MeanValue = metric.AllValues.Mean()
+		metric.ValuesPerSecond = metric.TotalHits / float64(flushInterval)
 
 		metric.Quantiles = make([]MetricQuantile, 0)
 		for _, q := range quantiles {
@@ -193,10 +223,6 @@ func ProcessMetric(metric *Metric, flushDuration time.Duration, quantiles []int,
 			quantile.Sum = quantile.AllValues.Sum()
 			metric.Quantiles = append(metric.Quantiles, *quantile)
 		}
-		fallthrough
-	default:
-		metric.MedianValue = metric.AllValues.Median()
-		metric.MeanValue = metric.AllValues.Mean()
 	}
 }
 

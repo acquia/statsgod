@@ -18,18 +18,6 @@
  * Package main: statsgod is a metrics aggregator inspired by statsd. The
  * main feature is to provide a server which accepts metrics over time,
  * aggregates them and forwards on to permanent storage.
- *
- * Data is sent over a TCP, UDP or Unix domain socket in the format
- * [namespace]:[value]|[type] where the namespace is a dot-delimeted string
- * like "user.login.success". Values are floating point numbers represented
- * as strings. The metric type uses the following values:
- *
- * Gauge   (g):  constant metric, value persists until the server is restarted.
- * Counter (c):  increment/decrement a given namespace.
- * Timer   (ms): a timer that calculates average, 90% percentile, etc.
- * Set     (s): a count of unique values sent during a flush period.
- *
- * An example data string would be "user.login.success:123|c"
  */
 package main
 
