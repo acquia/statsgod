@@ -20,7 +20,6 @@ package statsgod
 
 import (
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"strings"
@@ -227,16 +226,10 @@ func readInput(conn net.Conn, parseChannel chan string, logger Logger) {
 		length, err := conn.Read(buf)
 		if err != nil {
 			// EOF will present as an error, but it could just signal a hangup.
-			if err != io.EOF {
-				logger.Error.Println("Could not read stream.", err)
-			}
 			break
 		}
 		conn.Write([]byte(""))
-		if length == 0 {
-			logger.Info.Println("Connection closed by peer.")
-			break
-		} else {
+		if length > 0 {
 			// Check for multiple metrics delimited by a newline character.
 			metrics := strings.Split(overflow+strings.TrimSpace(strings.Trim(string(buf), "\x00")), "\n")
 			// If the buffer is full, the last metric likely has not fully been sent
@@ -271,11 +264,7 @@ func readInput(conn net.Conn, parseChannel chan string, logger Logger) {
 func readInputUdp(conn net.UDPConn, parseChannel chan string, logger Logger, config *ConfigValues) {
 	buf := make([]byte, config.Connection.Udp.Maxpacket)
 	length, _, err := conn.ReadFromUDP(buf[0:])
-	if err != nil {
-		logger.Error.Println("Could not read stream.", err)
-		return
-	}
-	if length != 0 {
+	if err == nil && length > 0 {
 		metrics := strings.Split(strings.TrimSpace(strings.Trim(string(buf), "\x00")), "\n")
 		for _, metric := range metrics {
 			parseChannel <- metric

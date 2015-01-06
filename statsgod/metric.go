@@ -256,13 +256,13 @@ func ParseMetrics(parseChannel chan string, relayChannel chan *Metric, auth Auth
 			authOk, authErr = auth.Authenticate(&metricString)
 			if authErr != nil || !authOk {
 				logger.Error.Printf("Auth Error: %v, %s", authOk, authErr)
-				continue
+				break
 			}
 
 			metric, err := ParseMetricString(metricString)
 			if err != nil {
 				logger.Error.Printf("Invalid metric: %s, %s", metricString, err)
-				continue
+				break
 			}
 			// Push the metric onto the channel to be aggregated and flushed.
 			relayChannel <- metric
