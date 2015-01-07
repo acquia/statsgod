@@ -41,6 +41,26 @@ var _ = Describe("Signals", func() {
 		config, _ := CreateConfig(configFile)
 		finishChannel := make(chan int)
 		logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
+		ListenForSignals(finishChannel, &config, &configFile, logger)
+
+		config.Service.Name = "testing"
+		syscall.Kill(syscall.Getpid(), syscall.SIGHUP)
+
+		It("should stop the parser when a quit signal is sent", func() {
+			ListenForSignals(finishChannel, &config, &configFile, logger)
+			parseChannel := make(chan string, 2)
+			relayChannel := make(chan *Metric, 2)
+			auth := CreateAuth(config)
+			quit := false
+			go ParseMetrics(parseChannel, relayChannel, auth, logger, &quit)
+			syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+			quit = true
+		})
+
+		It("should catch the 'reload' signal", func() {
+			Expect(config.Service.Name).Should(Equal("statsgod"))
+		})
+
 		It("should catch the 'quit' signals", func() {
 			signals := []syscall.Signal{
 				syscall.SIGABRT,
@@ -49,16 +69,11 @@ var _ = Describe("Signals", func() {
 				syscall.SIGQUIT,
 			}
 			for _, signal := range signals {
-				ListenForSignals(finishChannel, &config, &configFile, logger)
 				syscall.Kill(syscall.Getpid(), signal)
 				Expect(catchSignal(finishChannel)).Should(BeTrue())
+				ListenForSignals(finishChannel, &config, &configFile, logger)
 			}
-			ListenForSignals(finishChannel, &config, &configFile, logger)
 		})
 
-		It("should catch the 'reload' signal", func() {
-			config.Service.Name = "testing"
-			syscall.Kill(syscall.Getpid(), syscall.SIGHUP)
-		})
 	})
 })

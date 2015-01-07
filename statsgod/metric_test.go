@@ -199,26 +199,34 @@ var _ = Describe("Metrics", func() {
 
 		Context("when we process metrics", func() {
 			logger := *CreateLogger(ioutil.Discard, ioutil.Discard, ioutil.Discard, ioutil.Discard)
+			// This is a full test of the goroutine that takes input strings
+			// from the socket and converts them to Metrics.
+			It("should parse from the channel and populate the relay channel", func() {
+				config, _ := CreateConfig("")
+				config.Service.Auth = AuthTypeConfigToken
+				config.Service.Tokens["test-token"] = true
 
-			// This is a full test of the goroutine that listens for parsed metrics
-			// and then aggregates and relays to the designated backend.
-			It("should aggregate and relay properly", func() {
-				config, _ = CreateConfig("")
-				config.Relay.Type = RelayTypeMock
-				relay := CreateRelay(config, logger)
+				parseChannel := make(chan string, 2)
 				relayChannel := make(chan *Metric, 2)
+				auth := CreateAuth(config)
 				quit := false
-
-				go RelayMetrics(relay, relayChannel, logger, &config, &quit)
-				metricOne := CreateSimpleMetric("test.one", float64(123), MetricTypeGauge)
-				metricTwo := CreateSimpleMetric("test.two", float64(234), MetricTypeGauge)
-				relayChannel <- metricOne
-				relayChannel <- metricTwo
-				for len(relayChannel) > 0 {
+				go ParseMetrics(parseChannel, relayChannel, auth, logger, &quit)
+				parseChannel <- "test-token.test.one:123|c"
+				parseChannel <- "test-token.test.two:234|g"
+				parseChannel <- "bad-metric"
+				parseChannel <- "test-token.bad-metric|g"
+				parseChannel <- "bad-token.test.two:234|g"
+				for len(parseChannel) > 0 {
+					// Wait for the channel to be emptied.
 					time.Sleep(time.Microsecond)
 				}
 				quit = true
-				Expect(len(relayChannel)).Should(Equal(0))
+				Expect(len(parseChannel)).Should(Equal(0))
+				Expect(len(relayChannel)).Should(Equal(2))
+				metricOne := <-relayChannel
+				metricTwo := <-relayChannel
+				Expect(metricOne.LastValue).Should(Equal(float64(123)))
+				Expect(metricTwo.LastValue).Should(Equal(float64(234)))
 			})
 
 			metrics := make(map[string]Metric)

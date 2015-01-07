@@ -76,8 +76,14 @@ var _ = Describe("Connection Pool", func() {
 			It("should throw an error if there is no listener", func() {
 				addr := fmt.Sprintf("%s:%d", host, tmpPort)
 				StopTemporaryListener()
-				_, err := CreateConnectionPool(maxConnections, addr, ConnPoolTypeTcp, timeout, logger)
-				Expect(err).ShouldNot(Equal(nil))
+				_, errTcp := CreateConnectionPool(maxConnections, addr, ConnPoolTypeTcp, timeout, logger)
+				Expect(errTcp).ShouldNot(Equal(nil))
+
+				_, errUnix := CreateConnectionPool(maxConnections, "/dev/null", ConnPoolTypeUnix, timeout, logger)
+				Expect(errUnix).ShouldNot(BeNil())
+
+				_, errType := CreateConnectionPool(maxConnections, "/dev/null", ConnPoolTypeNone, timeout, logger)
+				Expect(errType).ShouldNot(BeNil())
 			})
 
 		})
