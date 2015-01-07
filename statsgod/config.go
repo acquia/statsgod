@@ -185,11 +185,10 @@ func (config *ConfigValues) LoadFile(filePath string) error {
 
 // GetHostname determines the current hostname if the provided default is empty.
 func GetHostname(defaultValue string) (hostname string) {
+	hostname = "unknown"
 	if defaultValue == "" {
 		hn, err := os.Hostname()
-		if err != nil {
-			hostname = "unknown"
-		} else {
+		if err == nil {
 			hostname = hn
 		}
 	} else {

@@ -310,20 +310,20 @@ func RelayMetrics(relay MetricRelay, relayChannel chan *Metric, logger Logger, c
 			// Time and flush the received metrics.
 			flushCount = len(metrics)
 			flushStart = time.Now()
-			relayAllMetrics(relay, metrics, logger)
+			RelayAllMetrics(relay, metrics, logger)
 			flushStop = time.Now()
 
 			// Prepare and flush the internal metrics.
 			PrepareFlushMetrics(metrics, config, flushStart, flushStop, flushCount)
-			relayAllMetrics(relay, metrics, logger)
+			RelayAllMetrics(relay, metrics, logger)
 		default:
 			// Flush interval hasn't passed yet.
 		}
 	}
 }
 
-// relayAllMetrics is a helper to iterate over a Metric map and flush all to the relay.
-func relayAllMetrics(relay MetricRelay, metrics map[string]Metric, logger Logger) {
+// RelayAllMetrics is a helper to iterate over a Metric map and flush all to the relay.
+func RelayAllMetrics(relay MetricRelay, metrics map[string]Metric, logger Logger) {
 	for key, metric := range metrics {
 		metric.FlushTime = int(time.Now().Unix())
 		relay.Relay(metric, logger)
