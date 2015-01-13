@@ -8,20 +8,25 @@ export PATH := $(abspath ./_vendor/bin):$(PATH)
 
 ifeq ($(TRAVIS), true)
 GOM=$(HOME)/gopath/bin/gom
+GOM_ENV='test'
+ifeq ($(TRAVIS_GO_VERSION), '1.4')
+GOM_ENV='-development'
+endif
 else
 GOM=gom
+GOM_ENV='-test'
 endif
 
 all: ${project}
 
 clean:
-	rm -rf _vendor 
+	rm -rf _vendor
 
 run: ${project}
 	go run -race ${project}.go
 
 $(project): deps
-	$(GOM) build -o $(GOPATH)/bin/statsgod
+	$(GOM) $(GOM_ENV) build -o $(GOPATH)/bin/statsgod
 
 deps:
 	$(GOM) -test install
@@ -38,7 +43,7 @@ test: deps lint
 	(test -f statsgod/statsgod.coverprofile && "$(TRAVIS)" == "true") || \
 		$(GOM) exec ginkgo -cover=true ./statsgod/.
 
-deb: 
+deb:
 	dpkg-buildpackage -uc -b -d -tc
 
 recv:
