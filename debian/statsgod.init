@@ -20,6 +20,7 @@ RUN_DIR=/var/run/$NAME
 LOG_DIR=/var/log/$NAME
 PIDFILE=$RUN_DIR/$NAME.pid
 STATSGOD_USER=statsgod
+STATSGOD_SOCK=$RUN_DIR/$NAME.sock
 
 # Look for $STATSGOD_USER, if it does not exist, start the daemon as the current user.
 id -u $STATSGOD_USER > /dev/null 2>&1 || STATSGOD_USER=$(whoami)
@@ -59,6 +60,10 @@ do_start()
                 --make-pidfile --background --test \
                 --startas /bin/bash -- -c "exec $DAEMON $DAEMON_ARGS > /dev/null 2>&1"\
                 || return 1
+
+        # If the service died unexpectedly, remove the sock.
+        [ -e $STATSGOD_SOCK ] && rm $STATSGOD_SOCK
+
         start-stop-daemon --start --quiet --pidfile $PIDFILE --chuid $STATSGOD_USER \
                 --make-pidfile --background \
                 --startas /bin/bash -- -c "exec $DAEMON $DAEMON_ARGS >> /var/log/statsgod/statsgod.log 2>> /var/log/statsgod/statsgod.err"\
