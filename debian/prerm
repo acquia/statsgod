@@ -1,0 +1,4 @@
+#!/bin/sh
+
+# Stop the service.
+/etc/init.d/statsgod stop || true
