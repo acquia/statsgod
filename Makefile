@@ -25,7 +25,7 @@ run: ${project}
 $(project): deps
 	$(GOM) build -o $(GOPATH)/bin/statsgod
 
-deps:
+deps: clean
 	$(GOM) -groups=$(GOM_GROUPS_FLAG) install
 
 lint: deps
@@ -45,5 +45,8 @@ deb:
 
 recv:
 	go run -race extras/receiver/test_receiver.go
+
+run-container:
+	docker run -it statsgod -v $(pwd)/:/usr/share/go/src/github.com/acquia/statsgod /bin/bash
 
 .PHONY: all clean run deps test
