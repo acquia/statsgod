@@ -48,16 +48,19 @@ type ConfigValues struct {
 	}
 	Connection struct {
 		Tcp struct {
-			Host string
-			Port int
+			Enabled bool
+			Host    string
+			Port    int
 		}
 		Udp struct {
+			Enabled   bool
 			Host      string
 			Port      int
 			Maxpacket int
 		}
 		Unix struct {
-			File string
+			Enabled bool
+			File    string
 		}
 	}
 	Relay struct {
@@ -119,11 +122,14 @@ func (config *ConfigValues) LoadFile(filePath string) error {
 	config.Service.Hostname = ""
 
 	// Connection
+	config.Connection.Tcp.Enabled = true
 	config.Connection.Tcp.Host = "127.0.0.1"
 	config.Connection.Tcp.Port = 8125
+	config.Connection.Udp.Enabled = true
 	config.Connection.Udp.Host = "127.0.0.1"
 	config.Connection.Udp.Port = 8126
 	config.Connection.Udp.Maxpacket = 1024
+	config.Connection.Unix.Enabled = true
 	config.Connection.Unix.File = "/var/run/statsgod/statsgod.sock"
 
 	// Relay

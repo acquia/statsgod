@@ -21,6 +21,7 @@
 package statsgod
 
 import (
+	"bytes"
 	"fmt"
 	"runtime"
 	"strconv"
@@ -142,7 +143,12 @@ func (c *CarbonRelay) SetPrefixesAndSuffixes(config ConfigValues) {
 // ApplyPrefixAndSuffix interpolates the configured prefix and suffix with the
 // metric namespace string.
 func (c CarbonRelay) ApplyPrefixAndSuffix(namespace string, metricType int) string {
-	return fmt.Sprintf("%s%s%s", c.Prefixes[metricType], namespace, c.Suffixes[metricType])
+	var metricNs bytes.Buffer
+
+	metricNs.WriteString(c.Prefixes[metricType])
+	metricNs.WriteString(namespace)
+	metricNs.WriteString(c.Suffixes[metricType])
+	return metricNs.String()
 }
 
 // Relay implements MetricRelay::Relay().
@@ -152,8 +158,6 @@ func (c CarbonRelay) Relay(metric Metric, logger Logger) bool {
 	stringTime := strconv.Itoa(metric.FlushTime)
 	var key string
 	var qkey string
-
-	defer logger.Info.Println("Done sending to Graphite")
 
 	switch metric.MetricType {
 	case MetricTypeGauge:
@@ -210,9 +214,6 @@ func sendCarbonMetric(key string, v float64, t string, retry bool, relay CarbonR
 	var releaseErr error
 	dataSent := false
 
-	sv := strconv.FormatFloat(float64(v), 'f', 6, 32)
-	payload := fmt.Sprintf("%s %s %s", key, sv, t)
-
 	// Send to the remote host.
 	conn, connErr := relay.ConnectionPool.GetConnection(logger)
 
@@ -221,15 +222,23 @@ func sendCarbonMetric(key string, v float64, t string, retry bool, relay CarbonR
 		// If there was an error connecting, recreate the connection and retry.
 		_, releaseErr = relay.ConnectionPool.ReleaseConnection(conn, true, logger)
 	} else {
+		var payload bytes.Buffer
+		sv := strconv.FormatFloat(float64(v), 'f', 6, 32)
+
+		payload.WriteString(key)
+		payload.WriteString(" ")
+		payload.WriteString(sv)
+		payload.WriteString(" ")
+		payload.WriteString(t)
+		payload.WriteString("\n")
+
 		// Write to the connection.
-		_, writeErr := fmt.Fprintf(conn, fmt.Sprintf("%s\n", payload))
+		_, writeErr := fmt.Fprint(conn, payload.String())
 		if writeErr != nil {
 			// If there was an error writing, recreate the connection and retry.
-			logger.Error.Printf("%v", writeErr)
 			_, releaseErr = relay.ConnectionPool.ReleaseConnection(conn, true, logger)
 		} else {
 			// If the metric was written, just release that connection back.
-			logger.Trace.Printf("Payload: %v", payload)
 			_, releaseErr = relay.ConnectionPool.ReleaseConnection(conn, false, logger)
 			dataSent = true
 		}
@@ -242,7 +251,6 @@ func sendCarbonMetric(key string, v float64, t string, retry bool, relay CarbonR
 
 	// If data was not sent, likely a socket timeout, we'll retry one time.
 	if !dataSent && retry {
-		logger.Error.Printf("Metric not sent, retrying %v", payload)
 		dataSent = sendCarbonMetric(key, v, t, false, relay, logger)
 	}
 
@@ -258,7 +266,7 @@ type MockRelay struct {
 // Relay implements MetricRelay::Relay().
 func (c MockRelay) Relay(metric Metric, logger Logger) bool {
 	ProcessMetric(&metric, c.FlushInterval, c.Percentile, logger)
-	logger.Trace.Printf(fmt.Sprintf("Mock flush: %v", metric))
+	logger.Trace.Printf("Mock flush: %v", metric)
 	return true
 }
 
@@ -294,7 +302,6 @@ func RelayMetrics(relay MetricRelay, relayChannel chan *Metric, logger Logger, c
 				logger.Info.Printf("Metric: %v", metrics[metric.Key])
 			}
 		case <-time.After(config.Relay.Flush):
-			logger.Trace.Println("Metric Channel Timeout")
 			// Nothing to read, attempt to flush.
 		}
 
@@ -302,8 +309,6 @@ func RelayMetrics(relay MetricRelay, relayChannel chan *Metric, logger Logger, c
 		// is a tick, flush the in-memory metrics.
 		select {
 		case <-tick:
-			logger.Trace.Println("Tick...")
-
 			// Prepare the runtime metrics.
 			PrepareRuntimeMetrics(metrics, config)
 
@@ -337,22 +342,33 @@ func PrepareRuntimeMetrics(metrics map[string]Metric, config *ConfigValues) {
 		memStats := &runtime.MemStats{}
 		runtime.ReadMemStats(memStats)
 
+		var nsBuffer bytes.Buffer
+		nsBuffer.WriteString("statsgod.")
+		nsBuffer.WriteString(config.Service.Hostname)
+		nsBuffer.WriteString(".runtime.memory")
+
 		// Prepare a metric for the memory allocated.
-		heapAllocKey := fmt.Sprintf("statsgod.%s.runtime.memory.heapalloc", config.Service.Hostname)
+		var heapBuffer bytes.Buffer
+		heapBuffer.WriteString(nsBuffer.String())
+		heapBuffer.WriteString(".heapalloc")
 		heapAllocValue := float64(memStats.HeapAlloc) / float64(Megabyte)
-		heapAllocMetric := CreateSimpleMetric(heapAllocKey, heapAllocValue, MetricTypeGauge)
+		heapAllocMetric := CreateSimpleMetric(heapBuffer.String(), heapAllocValue, MetricTypeGauge)
 		metrics[heapAllocMetric.Key] = *heapAllocMetric
 
 		// Prepare a metric for the memory allocated that is still in use.
-		allocKey := fmt.Sprintf("statsgod.%s.runtime.memory.alloc", config.Service.Hostname)
+		var allocBuffer bytes.Buffer
+		allocBuffer.WriteString(nsBuffer.String())
+		allocBuffer.WriteString(".alloc")
 		allocValue := float64(memStats.Alloc) / float64(Megabyte)
-		allocMetric := CreateSimpleMetric(allocKey, allocValue, MetricTypeGauge)
+		allocMetric := CreateSimpleMetric(allocBuffer.String(), allocValue, MetricTypeGauge)
 		metrics[allocMetric.Key] = *allocMetric
 
 		// Prepare a metric for the memory obtained from the system.
-		sysKey := fmt.Sprintf("statsgod.%s.runtime.memory.sys", config.Service.Hostname)
+		var sysBuffer bytes.Buffer
+		sysBuffer.WriteString(nsBuffer.String())
+		sysBuffer.WriteString(".sys")
 		sysValue := float64(memStats.Sys) / float64(Megabyte)
-		sysMetric := CreateSimpleMetric(sysKey, sysValue, MetricTypeGauge)
+		sysMetric := CreateSimpleMetric(sysBuffer.String(), sysValue, MetricTypeGauge)
 		metrics[sysMetric.Key] = *sysMetric
 	}
 }
@@ -360,15 +376,25 @@ func PrepareRuntimeMetrics(metrics map[string]Metric, config *ConfigValues) {
 // PrepareFlushMetrics creates metrics that represent the speed and size of the flushes.
 func PrepareFlushMetrics(metrics map[string]Metric, config *ConfigValues, flushStart time.Time, flushStop time.Time, flushCount int) {
 	if config.Debug.Relay {
+
+		var nsBuffer bytes.Buffer
+		nsBuffer.WriteString("statsgod.")
+		nsBuffer.WriteString(config.Service.Hostname)
+		nsBuffer.WriteString(".flush")
+
 		// Prepare the duration metric.
-		durationKey := fmt.Sprintf("statsgod.%s.flush.duration", config.Service.Hostname)
+		var durationBuffer bytes.Buffer
+		durationBuffer.WriteString(nsBuffer.String())
+		durationBuffer.WriteString(".duration")
 		durationValue := float64(int64(flushStop.Sub(flushStart).Nanoseconds()) / int64(time.Millisecond))
-		durationMetric := CreateSimpleMetric(durationKey, durationValue, MetricTypeTimer)
+		durationMetric := CreateSimpleMetric(durationBuffer.String(), durationValue, MetricTypeTimer)
 		metrics[durationMetric.Key] = *durationMetric
 
 		// Prepare the counter metric.
-		countKey := fmt.Sprintf("statsgod.%s.flush.count", config.Service.Hostname)
-		countMetric := CreateSimpleMetric(countKey, float64(flushCount), MetricTypeGauge)
+		var countBuffer bytes.Buffer
+		countBuffer.WriteString(nsBuffer.String())
+		countBuffer.WriteString(".count")
+		countMetric := CreateSimpleMetric(countBuffer.String(), float64(flushCount), MetricTypeGauge)
 		metrics[countMetric.Key] = *countMetric
 	}
 }

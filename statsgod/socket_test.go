@@ -88,7 +88,7 @@ var _ = Describe("Sockets", func() {
 						case <-time.After(5 * time.Second):
 							message = ""
 						}
-						Expect(message).Should(Equal(rm))
+						Expect(strings.TrimSpace(message)).Should(Equal(strings.TrimSpace(rm)))
 					}
 				}
 			}

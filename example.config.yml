@@ -16,13 +16,16 @@ service:
 ###
 connection:
     tcp:
+        enabled: true
         host: 127.0.0.1
         port: 8125
     udp:
+        enabled: true
         host: 127.0.0.1
         port: 8126
         maxpacket: 1024
     unix:
+        enabled: true
         file: /var/run/statsgod/statsgod.sock
 
 ###
