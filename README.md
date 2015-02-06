@@ -187,7 +187,7 @@ To download all dependencies and compile statsgod
 To run in a docker container
 
 	docker build -t statsgod .
-	docker run -it statsgod -v $(pwd)/:/usr/share/go/src/github.com/acquia/statsgod /bin/bash -c "make && make deb"
+	docker run -v $(pwd)/:/usr/share/go/src/github.com/acquia/statsgod -it statsgod /bin/bash -c "make && make deb"
 
 ## Testing
 For automated tests we are using http://onsi.github.io/ginkgo/ and http://onsi.github.io/gomega/. We have a combination of unit, integration and benchmark tests which are executed by Travis.ci.

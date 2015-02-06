@@ -47,6 +47,6 @@ recv:
 	go run -race extras/receiver/test_receiver.go
 
 run-container:
-	docker run -it statsgod -v $(pwd)/:/usr/share/go/src/github.com/acquia/statsgod /bin/bash
+	docker run -v $(shell pwd)/:/usr/share/go/src/github.com/acquia/statsgod -it statsgod /bin/bash
 
 .PHONY: all clean run deps test
