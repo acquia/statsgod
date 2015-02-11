@@ -17,6 +17,7 @@
 package statsgod_test
 
 import (
+	"crypto/rand"
 	"fmt"
 	. "github.com/acquia/statsgod/statsgod"
 	. "github.com/onsi/ginkgo"
@@ -41,6 +42,19 @@ func getDefaultMetricStructure() Metric {
 // Adjusts values to an acceptable precision for testing.
 func testPrecision(value float64) float64 {
 	return math.Floor(value*acceptablePrecision) / acceptablePrecision
+}
+
+// Generates a random alphanumeric string.
+func randomString(strSize int) string {
+
+	dictionary := ".0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+	var bytes = make([]byte, strSize)
+	rand.Read(bytes)
+	for k, v := range bytes {
+		bytes[k] = dictionary[v%byte(len(dictionary))]
+	}
+	return string(bytes)
 }
 
 var _ = Describe("Metrics", func() {
@@ -78,6 +92,39 @@ var _ = Describe("Metrics", func() {
 				Expect(metricOne.LastValue).Should(Equal(float64(3)))
 				Expect(metricOne.MetricType).Should(Equal(MetricTypeGauge))
 				Expect(metricOne.SampleRate).Should(Equal(float64(0.75)))
+			})
+
+			It("should handle spaces and null bytes correctly", func() {
+				spaceMetrics := []string{
+					" test.four:4|g|@0.75 ",
+					"     test.four:4|g|@0.75     ",
+					"   test.four:4 | g | @0.75     ",
+					" test.four:4 |g |@0.75 ",
+					" test.four:4|   g | @0.75 ",
+					" test.four:4 |g| @0.75 ",
+					" test.four:4| g |@0.75 ",
+					" test.four:4| g |@0.75\x00",
+					" test.four:4| g |@0.75 \x00 ",
+					"\x00test.four:4| g |@0.75 \x00",
+				}
+				var metricOne *Metric
+				var err error
+				for _, ms := range spaceMetrics {
+					metricOne, err = ParseMetricString(ms)
+					Expect(err).Should(BeNil())
+					Expect(metricOne).ShouldNot(Equal(nil))
+					Expect(metricOne.Key).Should(Equal("test.four"))
+					Expect(metricOne.LastValue).Should(Equal(float64(4)))
+					Expect(metricOne.MetricType).Should(Equal(MetricTypeGauge))
+					Expect(metricOne.SampleRate).Should(Equal(float64(0.75)))
+				}
+			})
+
+			It("should invalidate a namespace that is too long", func() {
+				longName := randomString(MaximumMetricLength)
+				metricString := fmt.Sprintf("statsgod.test.%s:3|g|@0.75", longName)
+				_, err := ParseMetricString(metricString)
+				Expect(err).ShouldNot(BeNil())
 			})
 
 			It("should contain reasonable defaults", func() {
