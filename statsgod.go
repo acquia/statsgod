@@ -27,6 +27,7 @@ import (
 	"github.com/acquia/statsgod/statsgod"
 	"io/ioutil"
 	"os"
+	"runtime/pprof"
 )
 
 const (
@@ -70,6 +71,15 @@ func main() {
 		logger = *statsgod.CreateLogger(ioutil.Discard, os.Stdout, os.Stdout, os.Stderr)
 	}
 
+	// Set up profiling.
+	if config.Debug.Profile {
+		f, err := os.Create("statsgod.prof")
+		if err != nil {
+			panic(err)
+		}
+		pprof.StartCPUProfile(f)
+	}
+
 	// Set up the backend relay.
 	relay := statsgod.CreateRelay(config, logger)
 
@@ -84,19 +94,29 @@ func main() {
 		go statsgod.RelayMetrics(relay, relayChannel, logger, &config, &quit)
 	}
 
+	var socketTcp statsgod.Socket
+	var socketUdp statsgod.Socket
+	var socketUnix statsgod.Socket
+
 	// Listen on the TCP socket.
-	tcpAddr := fmt.Sprintf("%s:%d", config.Connection.Tcp.Host, config.Connection.Tcp.Port)
-	socketTcp := statsgod.CreateSocket(statsgod.SocketTypeTcp, tcpAddr).(*statsgod.SocketTcp)
-	go socketTcp.Listen(parseChannel, logger, &config)
+	if config.Connection.Tcp.Enabled {
+		tcpAddr := fmt.Sprintf("%s:%d", config.Connection.Tcp.Host, config.Connection.Tcp.Port)
+		socketTcp = statsgod.CreateSocket(statsgod.SocketTypeTcp, tcpAddr).(*statsgod.SocketTcp)
+		go socketTcp.Listen(parseChannel, logger, &config)
+	}
 
 	// Listen on the UDP socket.
-	udpAddr := fmt.Sprintf("%s:%d", config.Connection.Udp.Host, config.Connection.Udp.Port)
-	socketUdp := statsgod.CreateSocket(statsgod.SocketTypeUdp, udpAddr).(*statsgod.SocketUdp)
-	go socketUdp.Listen(parseChannel, logger, &config)
+	if config.Connection.Udp.Enabled {
+		udpAddr := fmt.Sprintf("%s:%d", config.Connection.Udp.Host, config.Connection.Udp.Port)
+		socketUdp = statsgod.CreateSocket(statsgod.SocketTypeUdp, udpAddr).(*statsgod.SocketUdp)
+		go socketUdp.Listen(parseChannel, logger, &config)
+	}
 
 	// Listen on the Unix socket.
-	socketUnix := statsgod.CreateSocket(statsgod.SocketTypeUnix, config.Connection.Unix.File).(*statsgod.SocketUnix)
-	go socketUnix.Listen(parseChannel, logger, &config)
+	if config.Connection.Unix.Enabled {
+		socketUnix = statsgod.CreateSocket(statsgod.SocketTypeUnix, config.Connection.Unix.File).(*statsgod.SocketUnix)
+		go socketUnix.Listen(parseChannel, logger, &config)
+	}
 
 	// Listen for OS signals.
 	statsgod.ListenForSignals(finishChannel, &config, configFile, logger)
@@ -106,8 +126,17 @@ func main() {
 	case <-finishChannel:
 		logger.Info.Println("Exiting program.")
 		quit = true
-		socketTcp.Close(logger)
-		socketUdp.Close(logger)
-		socketUnix.Close(logger)
+		if config.Connection.Tcp.Enabled {
+			socketTcp.Close(logger)
+		}
+		if config.Connection.Udp.Enabled {
+			socketUdp.Close(logger)
+		}
+		if config.Connection.Unix.Enabled {
+			socketUnix.Close(logger)
+		}
+		if config.Debug.Profile {
+			pprof.StopCPUProfile()
+		}
 	}
 }

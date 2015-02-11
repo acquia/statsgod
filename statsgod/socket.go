@@ -34,6 +34,11 @@ const (
 	SocketTypeUnix
 )
 
+const (
+	// MinimumLengthMessage is the shortest message (or fragment) we can parse.
+	MinimumLengthMessage = 1
+)
+
 // Socket is the interface for all of our socket types.
 type Socket interface {
 	Listen(parseChannel chan string, logger Logger, config *ConfigValues)
@@ -231,7 +236,7 @@ func readInput(conn net.Conn, parseChannel chan string, logger Logger) {
 		conn.Write([]byte(""))
 		if length > 0 {
 			// Check for multiple metrics delimited by a newline character.
-			metrics := strings.Split(overflow+strings.TrimSpace(strings.Trim(string(buf), "\x00")), "\n")
+			metrics := strings.Split(overflow+string(buf[:length]), "\n")
 			// If the buffer is full, the last metric likely has not fully been sent
 			// yet. Try to parse it and if it throws an error, we'll prepend it to the
 			// next connection read presuming that it will span to the next data read.
@@ -249,7 +254,9 @@ func readInput(conn net.Conn, parseChannel chan string, logger Logger) {
 
 			// Send the metrics to be parsed.
 			for i := 0; i < metricCount; i++ {
-				parseChannel <- metrics[i]
+				if len(metrics[i]) > MinimumLengthMessage {
+					parseChannel <- metrics[i]
+				}
 			}
 		}
 
@@ -264,10 +271,12 @@ func readInput(conn net.Conn, parseChannel chan string, logger Logger) {
 func readInputUdp(conn net.UDPConn, parseChannel chan string, logger Logger, config *ConfigValues) {
 	buf := make([]byte, config.Connection.Udp.Maxpacket)
 	length, _, err := conn.ReadFromUDP(buf[0:])
-	if err == nil && length > 0 {
-		metrics := strings.Split(strings.TrimSpace(strings.Trim(string(buf), "\x00")), "\n")
+	if err == nil && length > MinimumLengthMessage {
+		metrics := strings.Split(string(buf[:length]), "\n")
 		for _, metric := range metrics {
-			parseChannel <- metric
+			if len(metric) > MinimumLengthMessage {
+				parseChannel <- metric
+			}
 		}
 	}
 }

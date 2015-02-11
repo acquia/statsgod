@@ -42,11 +42,14 @@ var _ = Describe("Config", func() {
 				Expect(config.Service.Hostname).ShouldNot(Equal(nil))
 
 				// Connection
+				Expect(config.Connection.Tcp.Enabled).ShouldNot(Equal(nil))
 				Expect(config.Connection.Tcp.Host).ShouldNot(Equal(nil))
 				Expect(config.Connection.Tcp.Port).ShouldNot(Equal(nil))
+				Expect(config.Connection.Udp.Enabled).ShouldNot(Equal(nil))
 				Expect(config.Connection.Udp.Host).ShouldNot(Equal(nil))
 				Expect(config.Connection.Udp.Port).ShouldNot(Equal(nil))
 				Expect(config.Connection.Udp.Maxpacket).ShouldNot(Equal(nil))
+				Expect(config.Connection.Unix.Enabled).ShouldNot(Equal(nil))
 				Expect(config.Connection.Unix.File).ShouldNot(Equal(nil))
 
 				// Relay
@@ -100,11 +103,14 @@ var _ = Describe("Config", func() {
 				Expect(hostname).Should(Equal(config.Service.Hostname))
 
 				// Connection
+				Expect(yaml.Connection.Tcp.Enabled).Should(Equal(config.Connection.Tcp.Enabled))
 				Expect(yaml.Connection.Tcp.Host).Should(Equal(config.Connection.Tcp.Host))
 				Expect(yaml.Connection.Tcp.Port).Should(Equal(config.Connection.Tcp.Port))
+				Expect(yaml.Connection.Udp.Enabled).Should(Equal(config.Connection.Udp.Enabled))
 				Expect(yaml.Connection.Udp.Host).Should(Equal(config.Connection.Udp.Host))
 				Expect(yaml.Connection.Udp.Port).Should(Equal(config.Connection.Udp.Port))
 				Expect(yaml.Connection.Udp.Maxpacket).Should(Equal(config.Connection.Udp.Maxpacket))
+				Expect(yaml.Connection.Unix.Enabled).Should(Equal(config.Connection.Unix.Enabled))
 				Expect(yaml.Connection.Unix.File).Should(Equal(config.Connection.Unix.File))
 
 				// Relay

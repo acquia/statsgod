@@ -20,9 +20,9 @@ package statsgod
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -37,6 +37,24 @@ const (
 	// SeparatorTypeSample is the character separating the type and an optional
 	// sample rate.
 	SeparatorTypeSample = "@"
+)
+
+const (
+	// RuneColon is the rune value for a colon (:).
+	RuneColon rune = 58
+	// RunePipe is the rune value for a pipe (|).
+	RunePipe rune = 124
+	// RuneAt is the rune value for an "at" sign (@).
+	RuneAt rune = 64
+	// RuneSpace is the rune value for a space ( ).
+	RuneSpace rune = 32
+	// RuneNull is the rune value for an null byte.
+	RuneNull rune = 0
+)
+
+const (
+	// MaximumMetricLength is the number of runes allowed in a metric string.
+	MaximumMetricLength = 512
 )
 
 const (
@@ -99,41 +117,54 @@ func ParseMetricString(metricString string) (*Metric, error) {
 	var metric = new(Metric)
 	sampleRate := float64(1.0)
 
-	// First extract the first element which is the namespace.
-	split1 := strings.Split(strings.TrimSpace(strings.Trim(metricString, "\x00")), SeparatorNamespaceValue)
-	if len(split1) == 1 {
-		// We didn't find the ":" separator.
-		return metric, errors.New("Invalid data string")
+	delimeters := [4]rune{
+		RuneColon, // ":"
+		RunePipe,  // "|"
+		RunePipe,  // "|"
+		RuneAt,    // "@"
 	}
 
-	// Next split the remaining string wich is the value and type.
-	split2 := strings.Split(split1[1], SeparatorValueType)
-	if len(split2) == 1 {
-		// We didn't find the "|" separator.
-		return metric, errors.New("Invalid data string")
-	} else if len(split2) == 3 {
-		// There may be a specified sample rate.
-		sampleSplit := strings.Split(split2[2], SeparatorTypeSample)
-		if len(sampleSplit) == 2 {
-			rate, rateErr := strconv.ParseFloat(sampleSplit[1], 32)
-			if rateErr == nil && rate > float64(0) && rate <= float64(1) {
-				sampleRate = rate
-			}
+	var metricStrings [5][MaximumMetricLength]rune
+	delimeterCount := 0
+	metricCount := 0
+	var metricRuneCount [5]int
+	for _, ch := range metricString {
+		if ch == RuneSpace || ch == RuneNull {
+			continue
+		}
+		if delimeterCount < len(delimeters) &&
+			metricCount < len(metricStrings)-1 &&
+			ch == delimeters[delimeterCount] {
+			delimeterCount++
+			metricCount++
+		} else {
+			metricStrings[metricCount][metricRuneCount[metricCount]] = ch
+			metricRuneCount[metricCount]++
+		}
+		if metricRuneCount[metricCount] == MaximumMetricLength {
+			break
 		}
 	}
 
-	// Locate the metric type.
-	MetricType, err := getMetricType(strings.TrimSpace(split2[1]))
-	if err != nil {
-		// We were unable to discern a metric type.
-		return metric, errors.New("Invalid data string")
+	if metricRuneCount[0] == 0 ||
+		metricRuneCount[1] == 0 ||
+		metricRuneCount[2] == 0 {
+		return metric, fmt.Errorf("Invalid data string, missing elements: '%s'", metricString)
 	}
 
-	// Parse the value as a float.
-	parsedValue, err := strconv.ParseFloat(split2[0], 32)
+	value, valueErr := strconv.ParseFloat(string(metricStrings[1][:metricRuneCount[1]]), 32)
+	if valueErr != nil {
+		return metric, fmt.Errorf("Invalid data string, bad value: '%s'", metricString)
+	}
+
+	metricType, err := getMetricType(string(metricStrings[2][:metricRuneCount[2]]))
 	if err != nil {
-		// We were unable to find a numeric value.
-		return metric, errors.New("Invalid data string")
+		return metric, fmt.Errorf("Invalid data string, bad type: '%s'", metricString)
+	}
+
+	sample, rateErr := strconv.ParseFloat(string(metricStrings[4][:metricRuneCount[4]]), 32)
+	if rateErr == nil && sample > float64(0) && sample <= float64(1) {
+		sampleRate = sample
 	}
 
 	// If a sample rate was applied, we inflate the hit count to extrapolate
@@ -145,9 +176,9 @@ func ParseMetricString(metricString string) (*Metric, error) {
 	}
 
 	// The string was successfully parsed. Convert to a Metric structure.
-	metric.Key = split1[0]
-	metric.MetricType = MetricType
-	metric.LastValue = parsedValue
+	metric.Key = string(metricStrings[0][:metricRuneCount[0]])
+	metric.MetricType = metricType
+	metric.LastValue = value
 	metric.AllValues = append(metric.AllValues, metric.LastValue)
 	metric.SampleRate = sampleRate
 
