@@ -5,6 +5,7 @@ version=0.1
 PACKAGES=extras statsgod
 
 export PATH := $(abspath ./_vendor/bin):$(PATH)
+export GOPATH := $(abspath ./_vendor):$(GOPATH)
 
 # Versions of golang prior to 1.4 use a different package URL.
 GOM_GROUPS_FLAG="test,test_tip"
