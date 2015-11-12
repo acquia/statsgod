@@ -1,8 +1,6 @@
 statsgod
 ========
 
-[![Build Status](https://magnum.travis-ci.com/acquia/statsgod.svg?token=V11Dcpsz9xGpCipC8pBD&branch=master)](https://magnum.travis-ci.com/acquia/statsgod)
-
 Statsgod is a metric aggregation service inspired by the statsd project. Written in Golang, it increases performance and can be deployed without dependencies. This project uses the same metric string format as statsd, but adds new features like alternate sockets, authentication, etc.
 
 ## Usage
