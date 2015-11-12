@@ -9,7 +9,7 @@ To download all dependencies and compile statsgod
 	gom build -o $GOPATH/bin/statsgod
 
 
-To run in a docker container
+To build the debian package in a docker container
 
 	docker build -t statsgod .
 	docker run -v $(pwd)/:/usr/share/go/src/github.com/acquia/statsgod -it statsgod /bin/bash -c "make && make deb"
@@ -26,11 +26,11 @@ Here is an example using the -logSent flag which will emit a line for each metri
 
 1. Start statsgod.go with config.debug.receipt set to true and redirect to a file:
 
-		gom exec go run statsgod.go 2>&1 /tmp/statsgod.output
+		gom exec go run statsgod.go 2>&1 > /tmp/statsgod.output
 
 2. Start loadtest.go with the -logSent flag and redirect to a file:
 
-		gom exec go run extras/loadtest.go [options] -logSent=true 2>&1 /tmp/statsgod.input
+		gom exec go run extras/loadtest.go [options] -logSent=true 2>&1 > /tmp/statsgod.input
 
 3. After collecting input and output, compare using the log\_compare.go utility:
 
