@@ -3,7 +3,7 @@ Upstream-Name: statsgod
 Source: https://github.com/acquia/statsgod
 
 Files: debian/*
-Copyright: 2014 Acquia, Inc. <hosting-eng@acquia.com>
+Copyright: 2015 Acquia, Inc. <engineering@acquia.com>
 License: Apache 2.0
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.

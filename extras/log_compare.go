@@ -1,5 +1,5 @@
 /**
- * Copyright 2014 Acquia, Inc.
+ * Copyright 2015 Acquia, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ go run extras/loadtest.go [options] -logSent=true 2>&1 /tmp/statsgod.input
 
 3. After collecting input and output, compare using this utility:
 go run extras/log_compare.go -in=/tmp/statsgod.input -out=/tmp/statsgod.output
-		
+
 `
 		fmt.Fprintf(os.Stderr, usage, os.Args[0])
 		flag.PrintDefaults()

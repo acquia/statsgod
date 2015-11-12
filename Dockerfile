@@ -12,27 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM       ubuntu:trusty
-MAINTAINER Acquia Engineering <hosting-eng@acquia.com>
+FROM ubuntu:trusty
+MAINTAINER Acquia Engineering <engineering@acquia.com>
 
-ENV GOLANG_VERSION 1.4.1
+ENV GOLANG_VERSION 1.5.1
 ENV DEBIAN_FRONTEND noninteractive
 
 # Setup container dependencies
 RUN apt-get -y update && \
     apt-get -y install build-essential \
 	  dh-make debhelper cdbs python-support \
-      git mercurial curl
-
-RUN curl -sSL https://storage.googleapis.com/golang/go${GOLANG_VERSION}.linux-amd64.tar.gz | tar -C /usr/lib/ -xz && \
-    mkdir -p /usr/share/go
-
-# Clean up
-RUN apt-get clean && \
+      git mercurial curl \
+&& apt-get clean && \
       rm -rf /var/cache/apt/* && \
       rm -rf /var/lib/apt/lists/* && \
       rm -rf /tmp/* && \
       rm -rf /var/tmp/*
+
+RUN curl -sSL https://storage.googleapis.com/golang/go${GOLANG_VERSION}.linux-amd64.tar.gz | tar -C /usr/lib/ -xz && \
+    mkdir -p /usr/share/go
 
 # Setup env and install GOM for Development
 ENV GOROOT /usr/lib/go

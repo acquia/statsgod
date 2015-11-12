@@ -1,7 +1,7 @@
 Source: statsgod
 Section: web
 Priority: optional
-Maintainer: Acquia <hosting-eng@acquia.com>
+Maintainer: Acquia <engineering@acquia.com>
 Build-Depends: debhelper (>= 9.0.0)
 Standards-Version: 3.9.5
 Homepage: http://github.com/acquia/statsgod
