@@ -1,5 +1,6 @@
 statsgod
 ========
+[![Build Status](https://travis-ci.org/acquia/statsgod.png)](https://travis-ci.org/acquia/statsgod)
 
 Statsgod is a metric aggregation service inspired by the statsd project. Written in Golang, it increases performance and can be deployed without dependencies. This project uses the same metric string format as statsd, but adds new features like alternate sockets, authentication, etc.
 
