@@ -123,7 +123,13 @@ func (pool *ConnectionPool) ReleaseConnection(conn net.Conn, recreate bool, logg
 	// recreate signifies that there was something wrong with the connection and
 	// that we should make a new one.
 	if recreate {
-		conn.Close()
+		switch conn.(type) {
+		case NilConn:
+		// do nothing
+		default:
+			conn.Close()
+		}
+
 		added, err := pool.CreateConnection(logger)
 		if !added || err != nil {
 			logger.Error.Println("Could not release connection.", err)
