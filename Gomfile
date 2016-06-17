@@ -16,14 +16,12 @@
 gom 'github.com/jmcvetta/randutil'
 gom 'gopkg.in/yaml.v2'
 
-# Prior to go 1.4 vet and cover are retrieved from legacy URLs.
+# Prior to go 1.4 cover is retrieved from the legacy URL.
 group :test_legacy do
-  gom 'code.google.com/p/go.tools/cmd/vet'
   gom 'code.google.com/p/go.tools/cmd/cover'
 end
 
 group :test_tip do
-  gom 'golang.org/x/tools/cmd/vet'
   gom 'golang.org/x/tools/cmd/cover'
 end
 

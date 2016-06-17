@@ -44,9 +44,12 @@ deps: clean
 	$(GOM) -groups=$(GOM_GROUPS_FLAG) install
 
 lint: deps
-	$(GOM) exec go fmt ./...
-	$(GOM) exec go vet -x ./...
-	$(GOM) exec golint .
+	$(GOM) exec go fmt statsgod.go statsgod_test.go
+	$(GOM) exec go fmt statsgod/*.go
+	$(GOM) exec go vet -x statsgod.go statsgod_test.go
+	$(GOM) exec go vet -x statsgod/*.go
+	$(GOM) exec golint statsgod.go statsgod_test.go
+	$(GOM) exec golint statsgod/*.go
 	$(foreach p, $(PACKAGES), $(GOM) exec golint ./$(p)/.; )
 
 test: deps lint
